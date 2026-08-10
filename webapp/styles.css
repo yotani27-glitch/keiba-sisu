@@ -8,8 +8,8 @@
   --accent: #2563eb;
   --accent-contrast: #ffffff;
   --gold: #fde68a;
-  --silver: #e5e7eb;
-  --bronze: #fdba74;
+  --rank2-blue: #bfdbfe;
+  --rank3-green: #bbf7d0;
   font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
@@ -21,8 +21,8 @@
     --text: #e7e9ee;
     --muted: #9aa1b1;
     --gold: #6b5b1f;
-    --silver: #3a3f4b;
-    --bronze: #6b3f1f;
+    --rank2-blue: #1e3a5f;
+    --rank3-green: #1f4d2e;
   }
 }
 
@@ -183,8 +183,8 @@ tbody td.col-label { text-align: left; font-weight: 500; }
 tbody tr:hover { background: rgba(37, 99, 235, 0.06); }
 
 td.rank-1 { background: var(--gold); font-weight: 700; }
-td.rank-2 { background: var(--silver); font-weight: 600; }
-td.rank-3 { background: var(--bronze); font-weight: 600; }
+td.rank-2 { background: var(--rank2-blue); font-weight: 600; }
+td.rank-3 { background: var(--rank3-green); font-weight: 600; }
 
 .toast {
   position: fixed;

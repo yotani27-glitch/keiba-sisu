@@ -446,6 +446,10 @@ function visibleLabels() {
   return [...state.labels].sort(compareLabels).filter((l) => !state.hiddenLabels.has(l));
 }
 
+function rankClass(rank) {
+  return rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
+}
+
 function renderTable() {
   const rows = getVisibleRows();
   const labels = visibleLabels();
@@ -479,12 +483,13 @@ function renderTable() {
     for (const label of labels) {
       const value = r.scores[label];
       if (NO_RANK_LABELS.has(label)) {
-        cells.push(`<td class="col-num">${value !== undefined ? value : ''}</td>`);
+        const rankCls = rankClass(value);
+        cells.push(`<td class="col-num ${rankCls}">${value !== undefined ? value : ''}</td>`);
         continue;
       }
       const rank = r.ranks[label];
-      const rankCls = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
-      if (mode !== 'rank') cells.push(`<td class="col-num">${value !== undefined ? value : ''}</td>`);
+      const rankCls = rankClass(rank);
+      if (mode !== 'rank') cells.push(`<td class="col-num ${rankCls}">${value !== undefined ? value : ''}</td>`);
       if (mode !== 'value') cells.push(`<td class="col-num ${rankCls}">${rank !== undefined ? rank : ''}</td>`);
     }
     return `<tr>${cells.join('')}</tr>`;
