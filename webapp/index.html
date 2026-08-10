@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>指数ビューア</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-title">
+    <h1>指数ビューア</h1>
+    <p>外部指数CSV（TARGET frontier取込形式）をフォルダから読み込んで一覧表にします</p>
+  </div>
+  <div class="topbar-actions">
+    <button id="loadButton" class="primary">フォルダを選択して読み込み</button>
+    <span id="loadStatus" class="status-text">未読み込み</span>
+  </div>
+</header>
+
+<main>
+  <section id="empty" class="empty-state">
+    <p>「フォルダを選択して読み込み」を押して、指数CSV（または日次ZIP）が置かれているフォルダを指定してください。</p>
+    <p class="hint">対応ブラウザ（Chrome / Edge）では次回以降フォルダ選択が省略され、ボタン1つで再読み込みできます。</p>
+  </section>
+
+  <section id="dashboard" hidden>
+    <div class="toolbar">
+      <div class="field">
+        <label for="dateSelect">日付</label>
+        <select id="dateSelect"></select>
+      </div>
+      <div class="field">
+        <label for="placeSelect">場所</label>
+        <select id="placeSelect"></select>
+      </div>
+      <div class="field">
+        <label for="raceSelect">R</label>
+        <select id="raceSelect">
+          <option value="">すべて</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="modeSelect">表示</label>
+        <select id="modeSelect">
+          <option value="both">値＋順位</option>
+          <option value="value">値のみ</option>
+          <option value="rank">順位のみ</option>
+        </select>
+      </div>
+      <div class="field grow">
+        <label for="searchInput">検索</label>
+        <input id="searchInput" type="text" placeholder="馬番・値などで絞り込み" />
+      </div>
+      <div class="field">
+        <button id="columnButton">表示列</button>
+        <div id="columnMenu" class="column-menu" hidden></div>
+      </div>
+      <div class="field">
+        <button id="exportButton">CSV書き出し</button>
+      </div>
+    </div>
+
+    <div id="stats" class="stats"></div>
+
+    <div class="table-wrap">
+      <table id="dataTable"></table>
+    </div>
+    <div id="tableEmpty" class="empty-state" hidden>該当するデータがありません。</div>
+  </section>
+
+  <div id="toast" class="toast"></div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

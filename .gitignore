@@ -1,0 +1,5 @@
+# 個人の指数データ（非公開）は追跡しない
+*.zip
+*.csv
+Thumbs.db
+.DS_Store
