@@ -24,9 +24,11 @@ const LABEL_NAMES = {
   'GYN': '予想人気順',
 };
 
-// 値が小さいほど良いラベル（例: 予想人気順は1番人気が最上位）。
-// 記載のないラベルは「値が大きいほど良い」として順位を計算する。
-const ASCENDING_LABELS = new Set(['GYN']);
+// 値が小さいほど良いラベル。記載のないラベルは「値が大きいほど良い」として順位を計算する。
+const ASCENDING_LABELS = new Set([]);
+
+// 値自体がすでに順位（予想人気順など）のため、別途の順位計算・順位列表示が不要なラベル
+const NO_RANK_LABELS = new Set(['GYN']);
 
 function labelDisplayName(label) {
   return LABEL_NAMES[label] || label;
@@ -230,6 +232,7 @@ function finalizeRecords() {
   }
   for (const group of groups.values()) {
     for (const label of state.labels) {
+      if (NO_RANK_LABELS.has(label)) continue;
       const ascending = ASCENDING_LABELS.has(label);
       const withScore = group.filter((r) => r.scores[label] !== undefined);
       withScore.sort((a, b) => ascending
@@ -454,6 +457,10 @@ function renderTable() {
   ];
   for (const label of labels) {
     const name = labelDisplayName(label);
+    if (NO_RANK_LABELS.has(label)) {
+      columns.push({ key: `${label}::value`, title: name, cls: 'col-num' });
+      continue;
+    }
     if (mode !== 'rank') columns.push({ key: `${label}::value`, title: `${name} 値`, cls: 'col-num' });
     if (mode !== 'value') columns.push({ key: `${label}::rank`, title: `${name} 順位`, cls: 'col-num' });
   }
@@ -471,6 +478,10 @@ function renderTable() {
     ];
     for (const label of labels) {
       const value = r.scores[label];
+      if (NO_RANK_LABELS.has(label)) {
+        cells.push(`<td class="col-num">${value !== undefined ? value : ''}</td>`);
+        continue;
+      }
       const rank = r.ranks[label];
       const rankCls = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
       if (mode !== 'rank') cells.push(`<td class="col-num">${value !== undefined ? value : ''}</td>`);
@@ -500,6 +511,7 @@ function exportCsv() {
   const header = ['場所', 'R', '馬番'];
   for (const label of labels) {
     const name = labelDisplayName(label);
+    if (NO_RANK_LABELS.has(label)) { header.push(name); continue; }
     if (mode !== 'rank') header.push(`${name}_値`);
     if (mode !== 'value') header.push(`${name}_順位`);
   }
@@ -507,6 +519,7 @@ function exportCsv() {
   for (const r of rows) {
     const cols = [PLACE_NAMES[r.placeCode] || r.placeCode, r.race, r.uma];
     for (const label of labels) {
+      if (NO_RANK_LABELS.has(label)) { cols.push(r.scores[label] !== undefined ? r.scores[label] : ''); continue; }
       if (mode !== 'rank') cols.push(r.scores[label] !== undefined ? r.scores[label] : '');
       if (mode !== 'value') cols.push(r.ranks[label] !== undefined ? r.ranks[label] : '');
     }
