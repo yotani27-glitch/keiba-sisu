@@ -6,6 +6,32 @@ const PLACE_NAMES = {
   '06': '中山', '07': '中京', '08': '京都', '09': '阪神', '10': '小倉',
 };
 
+// ラベル(ファイル名の指数種別プレフィックス) -> 表示名
+const LABEL_NAMES = {
+  '00tua': 'LVL2',
+  '1tua': '坂路調教指数',
+  '2tua': '坂路血統指数',
+  '3tua': '持ち時計血統指数',
+  '4tua': 'コース連動指数',
+  '5tua': '血統連動指数',
+  '6tua': 'Ｓ指数',
+  '7tua': 'Ｆ指数',
+  '8tua': 'TUA指数',
+  '9tua': 'arms指数',
+  '10tua': 'バランス指数',
+  '11tua': 'arms指数２',
+  'gallop': 'gallop指数',
+  'GYN': '予想人気順',
+};
+
+// 値が小さいほど良いラベル（例: 予想人気順は1番人気が最上位）。
+// 記載のないラベルは「値が大きいほど良い」として順位を計算する。
+const ASCENDING_LABELS = new Set(['GYN']);
+
+function labelDisplayName(label) {
+  return LABEL_NAMES[label] || label;
+}
+
 const state = {
   records: new Map(),   // key: date|placeCode|race|uma -> record
   labels: new Set(),    // 指数ラベル一覧 (例: '00','1',...,'11','gallop','GYN')
@@ -204,8 +230,11 @@ function finalizeRecords() {
   }
   for (const group of groups.values()) {
     for (const label of state.labels) {
+      const ascending = ASCENDING_LABELS.has(label);
       const withScore = group.filter((r) => r.scores[label] !== undefined);
-      withScore.sort((a, b) => b.scores[label] - a.scores[label]);
+      withScore.sort((a, b) => ascending
+        ? a.scores[label] - b.scores[label]
+        : b.scores[label] - a.scores[label]);
       let rank = 0, prevScore = null, seen = 0;
       for (const r of withScore) {
         seen++;
@@ -368,7 +397,7 @@ function renderColumnMenu() {
       <button data-action="none">すべて非表示</button>
     </div>
     ${labels.map((l) => `
-      <label><input type="checkbox" data-label="${l}" ${state.hiddenLabels.has(l) ? '' : 'checked'} /> ${l}</label>
+      <label><input type="checkbox" data-label="${l}" ${state.hiddenLabels.has(l) ? '' : 'checked'} /> ${labelDisplayName(l)}</label>
     `).join('')}
   `;
 }
@@ -424,8 +453,9 @@ function renderTable() {
     { key: 'uma', title: '馬番', cls: 'col-num' },
   ];
   for (const label of labels) {
-    if (mode !== 'rank') columns.push({ key: `${label}::value`, title: `${label} 値`, cls: 'col-num' });
-    if (mode !== 'value') columns.push({ key: `${label}::rank`, title: `${label} 順位`, cls: 'col-num' });
+    const name = labelDisplayName(label);
+    if (mode !== 'rank') columns.push({ key: `${label}::value`, title: `${name} 値`, cls: 'col-num' });
+    if (mode !== 'value') columns.push({ key: `${label}::rank`, title: `${name} 順位`, cls: 'col-num' });
   }
 
   const thead = `<thead><tr>${columns.map((c) => {
@@ -469,8 +499,9 @@ function exportCsv() {
   const mode = state.mode;
   const header = ['場所', 'R', '馬番'];
   for (const label of labels) {
-    if (mode !== 'rank') header.push(`${label}_値`);
-    if (mode !== 'value') header.push(`${label}_順位`);
+    const name = labelDisplayName(label);
+    if (mode !== 'rank') header.push(`${name}_値`);
+    if (mode !== 'value') header.push(`${name}_順位`);
   }
   const lines = [header.join(',')];
   for (const r of rows) {
