@@ -494,17 +494,18 @@ function renderTable() {
   for (const label of labels) {
     const name = labelDisplayName(label);
     if (NO_RANK_LABELS.has(label)) {
-      columns.push({ key: `${label}::value`, title: name, cls: 'col-num' });
+      columns.push({ key: `${label}::value`, title: name, cls: 'col-num col-rank' });
       continue;
     }
     if (mode !== 'rank') columns.push({ key: `${label}::value`, title: `${name} 値`, cls: 'col-num' });
-    if (mode !== 'value') columns.push({ key: `${label}::rank`, title: `${name} 順位`, cls: 'col-num' });
+    if (mode !== 'value') columns.push({ key: `${label}::rank`, title: '順', titleAttr: `${name} 順位`, cls: 'col-num col-rank' });
   }
 
   const thead = `<thead><tr>${columns.map((c) => {
     const active = state.sort && state.sort.key === c.key;
     const arrow = active ? (state.sort.dir === 1 ? '▲' : '▼') : '';
-    return `<th data-key="${c.key}" class="${c.cls}">${c.title}<span class="sort-indicator">${arrow}</span></th>`;
+    const titleAttr = c.titleAttr ? ` title="${c.titleAttr}"` : '';
+    return `<th data-key="${c.key}" class="${c.cls}"${titleAttr}>${c.title}<span class="sort-indicator">${arrow}</span></th>`;
   }).join('')}</tr></thead>`;
 
   const tbody = `<tbody>${rows.map((r) => {
@@ -517,13 +518,13 @@ function renderTable() {
       const value = r.scores[label];
       if (NO_RANK_LABELS.has(label)) {
         const rankCls = rankClass(value);
-        cells.push(`<td class="col-num ${rankCls}">${value !== undefined ? value : ''}</td>`);
+        cells.push(`<td class="col-num col-rank ${rankCls}">${value !== undefined ? value : ''}</td>`);
         continue;
       }
       const rank = r.ranks[label];
       const rankCls = rankClass(rank);
       if (mode !== 'rank') cells.push(`<td class="col-num ${rankCls}">${value !== undefined ? value : ''}</td>`);
-      if (mode !== 'value') cells.push(`<td class="col-num ${rankCls}">${rank !== undefined ? rank : ''}</td>`);
+      if (mode !== 'value') cells.push(`<td class="col-num col-rank ${rankCls}">${rank !== undefined ? rank : ''}</td>`);
     }
     return `<tr>${cells.join('')}</tr>`;
   }).join('')}</tbody>`;
