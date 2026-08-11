@@ -59,6 +59,7 @@ const els = {
   searchInput: $('#searchInput'),
   columnButton: $('#columnButton'),
   columnMenu: $('#columnMenu'),
+  columnCount: $('#columnCount'),
   exportButton: $('#exportButton'),
   stats: $('#stats'),
   table: $('#dataTable'),
@@ -368,7 +369,8 @@ function afterLoad({ fileCount }) {
   }
   els.empty.hidden = true;
   els.dashboard.hidden = false;
-  state.hiddenLabels = new Set();
+  // 指数の種類が多いため、既定では何も表示せず「指数を選択」から選んでもらう
+  state.hiddenLabels = new Set(state.labels);
   populateFilterOptions();
   renderColumnMenu();
   renderTable();
@@ -414,13 +416,20 @@ function renderColumnMenu() {
   const labels = [...state.labels].sort(compareLabels);
   els.columnMenu.innerHTML = `
     <div class="menu-actions">
-      <button data-action="all">すべて表示</button>
-      <button data-action="none">すべて非表示</button>
+      <button data-action="all">すべて選択</button>
+      <button data-action="none">選択解除</button>
     </div>
     ${labels.map((l) => `
       <label><input type="checkbox" data-label="${l}" ${state.hiddenLabels.has(l) ? '' : 'checked'} /> ${labelDisplayName(l)}</label>
     `).join('')}
   `;
+  updateColumnCount();
+}
+
+function updateColumnCount() {
+  const total = state.labels.size;
+  const shown = total - state.hiddenLabels.size;
+  els.columnCount.textContent = `${shown}/${total}`;
 }
 
 // ---------- テーブル描画 ----------
@@ -614,6 +623,7 @@ els.columnMenu.addEventListener('change', (e) => {
   if (!label) return;
   if (e.target.checked) state.hiddenLabels.delete(label);
   else state.hiddenLabels.add(label);
+  updateColumnCount();
   renderTable();
 });
 
