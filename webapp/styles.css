@@ -107,6 +107,9 @@ main { padding: 20px 24px 60px; }
 }
 .field input[type="text"] { width: 100%; }
 
+.year-export { display: flex; gap: 6px; }
+.year-export select { width: 90px; }
+
 .count-badge {
   display: inline-block;
   margin-left: 4px;

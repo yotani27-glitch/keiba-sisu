@@ -61,6 +61,8 @@ const els = {
   columnMenu: $('#columnMenu'),
   columnCount: $('#columnCount'),
   exportButton: $('#exportButton'),
+  yearExportSelect: $('#yearExportSelect'),
+  yearExportButton: $('#yearExportButton'),
   stats: $('#stats'),
   table: $('#dataTable'),
   tableEmpty: $('#tableEmpty'),
@@ -388,6 +390,9 @@ function populateFilterOptions() {
   state.filters.date = dates[dates.length - 1] || '';
   els.dateSelect.value = state.filters.date;
   updatePlaceOptions();
+
+  const years = [...new Set(dates.map((d) => d.slice(0, 4)))].sort().reverse();
+  els.yearExportSelect.innerHTML = years.map((y) => `<option value="${y}">${y}年</option>`).join('');
 }
 
 function updatePlaceOptions() {
@@ -545,12 +550,11 @@ function renderTable() {
   `;
 }
 
-function exportCsv() {
-  const rows = getVisibleRows();
-  const labels = visibleLabels();
-  const mode = state.mode;
+function buildCsvLines(rows, labels, mode, { includeDate } = {}) {
   const hasNames = rows.some((r) => r.name !== undefined);
-  const header = ['場所', 'R', '馬番'];
+  const header = [];
+  if (includeDate) header.push('日付');
+  header.push('場所', 'R', '馬番');
   if (hasNames) header.push('馬名');
   for (const label of labels) {
     const name = labelDisplayName(label);
@@ -560,7 +564,9 @@ function exportCsv() {
   }
   const lines = [header.join(',')];
   for (const r of rows) {
-    const cols = [PLACE_NAMES[r.placeCode] || r.placeCode, r.race, r.uma];
+    const cols = [];
+    if (includeDate) cols.push(formatDate(r.date));
+    cols.push(PLACE_NAMES[r.placeCode] || r.placeCode, r.race, r.uma);
     if (hasNames) cols.push(r.name || '');
     for (const label of labels) {
       if (NO_RANK_LABELS.has(label)) { cols.push(r.scores[label] !== undefined ? r.scores[label] : ''); continue; }
@@ -569,14 +575,36 @@ function exportCsv() {
     }
     lines.push(cols.join(','));
   }
+  return lines;
+}
+
+function downloadCsv(lines, filename) {
   const csv = '﻿' + lines.join('\r\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
-  const placeLabel = PLACE_NAMES[state.filters.place] || state.filters.place;
   link.href = url;
-  link.download = `指数_${state.filters.date}_${placeLabel}.csv`;
+  link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function exportCsv() {
+  const rows = getVisibleRows();
+  const lines = buildCsvLines(rows, visibleLabels(), state.mode);
+  const placeLabel = PLACE_NAMES[state.filters.place] || state.filters.place;
+  downloadCsv(lines, `指数_${state.filters.date}_${placeLabel}.csv`);
+}
+
+function exportYearCsv() {
+  const year = els.yearExportSelect.value;
+  if (!year) { notify('出力できる年がありません'); return; }
+  const rows = [...state.records.values()].filter((r) => r.date.startsWith(year));
+  rows.sort((a, b) => (a.date !== b.date ? a.date.localeCompare(b.date)
+    : a.placeCode !== b.placeCode ? a.placeCode.localeCompare(b.placeCode)
+    : a.race !== b.race ? a.race - b.race : a.uma - b.uma));
+  const lines = buildCsvLines(rows, visibleLabels(), state.mode, { includeDate: true });
+  downloadCsv(lines, `指数_${year}年.csv`);
+  notify(`${year}年分（${rows.length}頭）を書き出しました`);
 }
 
 // ---------- イベント ----------
@@ -605,6 +633,7 @@ els.searchInput.addEventListener('input', () => {
   renderTable();
 });
 els.exportButton.addEventListener('click', exportCsv);
+els.yearExportButton.addEventListener('click', exportYearCsv);
 
 els.columnButton.addEventListener('click', () => {
   els.columnMenu.hidden = !els.columnMenu.hidden;
