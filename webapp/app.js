@@ -588,9 +588,16 @@ function downloadCsv(lines, filename) {
   URL.revokeObjectURL(url);
 }
 
+// 書き出し用の指数一覧。画面で1つも選んでいないときは全指数を出す
+// （既定が未選択のため、そのままだと指数の入っていないCSVになってしまうため）
+function exportLabels() {
+  const selected = visibleLabels();
+  return selected.length ? selected : [...state.labels].sort(compareLabels);
+}
+
 function exportCsv() {
   const rows = getVisibleRows();
-  const lines = buildCsvLines(rows, visibleLabels(), state.mode);
+  const lines = buildCsvLines(rows, exportLabels(), state.mode);
   const placeLabel = PLACE_NAMES[state.filters.place] || state.filters.place;
   downloadCsv(lines, `指数_${state.filters.date}_${placeLabel}.csv`);
 }
@@ -602,9 +609,10 @@ function exportYearCsv() {
   rows.sort((a, b) => (a.date !== b.date ? a.date.localeCompare(b.date)
     : a.placeCode !== b.placeCode ? a.placeCode.localeCompare(b.placeCode)
     : a.race !== b.race ? a.race - b.race : a.uma - b.uma));
-  const lines = buildCsvLines(rows, visibleLabels(), state.mode, { includeDate: true });
+  const labels = exportLabels();
+  const lines = buildCsvLines(rows, labels, state.mode, { includeDate: true });
   downloadCsv(lines, `指数_${year}年.csv`);
-  notify(`${year}年分（${rows.length}頭）を書き出しました`);
+  notify(`${year}年分（${rows.length}頭 / 指数${labels.length}種）を書き出しました`);
 }
 
 // ---------- イベント ----------
