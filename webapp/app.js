@@ -183,6 +183,9 @@ function decodeCsv(buffer) {
 // ---------- CSVパース＆ID分解 ----------
 const FILE_NAME_RE = /^([A-Za-z0-9]+?)(\d{8})\.csv$/i;
 
+// 馬名対応ファイル(例: name20260808.csv)のラベル名。中身は "18桁ID,馬名" で、指数と違い数値ではなく文字列。
+const NAME_LABEL = 'name';
+
 function decodeKey(id18) {
   return {
     date: id18.slice(0, 8),
@@ -199,6 +202,7 @@ function processCsvEntry(filename, text) {
   const m = base.match(FILE_NAME_RE);
   if (!m) return 0;
   const label = m[1];
+  const isNameFile = label.toLowerCase() === NAME_LABEL;
   let count = 0;
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -206,8 +210,7 @@ function processCsvEntry(filename, text) {
     const parts = line.includes('\t') ? line.split('\t') : line.split(',');
     if (parts.length < 2) continue;
     const id = parts[0].trim();
-    const score = Number(parts[1].trim());
-    if (id.length !== 18 || !/^\d{18}$/.test(id) || Number.isNaN(score)) continue;
+    if (id.length !== 18 || !/^\d{18}$/.test(id)) continue;
 
     const { date, placeCode, kai, day, race, uma } = decodeKey(id);
     const key = `${date}|${placeCode}|${race}|${uma}`;
@@ -216,6 +219,15 @@ function processCsvEntry(filename, text) {
       rec = { date, placeCode, kai, day, race, uma, scores: {}, ranks: {} };
       state.records.set(key, rec);
     }
+
+    if (isNameFile) {
+      rec.name = parts.slice(1).join(',').trim();
+      count++;
+      continue;
+    }
+
+    const score = Number(parts[1].trim());
+    if (Number.isNaN(score)) continue;
     rec.scores[label] = score;
     state.labels.add(label);
     count++;
@@ -413,6 +425,7 @@ function getVisibleRows() {
     const q = state.search.trim().toLowerCase();
     rows = rows.filter((r) => {
       if (String(r.uma).includes(q) || String(r.race).includes(q)) return true;
+      if (r.name && r.name.toLowerCase().includes(q)) return true;
       for (const label of state.labels) {
         if (state.hiddenLabels.has(label)) continue;
         const v = r.scores[label];
@@ -436,6 +449,7 @@ function getVisibleRows() {
 function sortValue(rec, key) {
   if (key === 'race') return rec.race;
   if (key === 'uma') return rec.uma;
+  if (key === 'name') return rec.name || '';
   const [label, kind] = key.split('::');
   const src = kind === 'rank' ? rec.ranks : rec.scores;
   const v = src[label];
@@ -455,10 +469,13 @@ function renderTable() {
   const labels = visibleLabels();
   const mode = state.mode;
 
+  const hasNames = rows.some((r) => r.name !== undefined);
+
   const columns = [
     { key: 'race', title: 'R', cls: 'col-num' },
     { key: 'uma', title: '馬番', cls: 'col-num' },
   ];
+  if (hasNames) columns.push({ key: 'name', title: '馬名', cls: 'col-label' });
   for (const label of labels) {
     const name = labelDisplayName(label);
     if (NO_RANK_LABELS.has(label)) {
@@ -480,6 +497,7 @@ function renderTable() {
       `<td class="col-num">${r.race}</td>`,
       `<td class="col-num">${r.uma}</td>`,
     ];
+    if (hasNames) cells.push(`<td class="col-label">${r.name || ''}</td>`);
     for (const label of labels) {
       const value = r.scores[label];
       if (NO_RANK_LABELS.has(label)) {
@@ -500,12 +518,14 @@ function renderTable() {
 
   const placeLabel = PLACE_NAMES[state.filters.place] || state.filters.place;
   const raceCount = new Set(rows.map((r) => r.race)).size;
+  const nameCount = rows.filter((r) => r.name).length;
   els.stats.innerHTML = `
     <span>対象日: <b>${state.filters.date ? formatDate(state.filters.date) : '-'}</b></span>
     <span>場所: <b>${placeLabel || '-'}</b></span>
     <span>レース数: <b>${raceCount}</b></span>
     <span>頭数: <b>${rows.length}</b></span>
     <span>指数種別: <b>${labels.length}</b></span>
+    ${hasNames ? `<span>馬名: <b>${nameCount}/${rows.length}</b></span>` : ''}
   `;
 }
 
@@ -513,7 +533,9 @@ function exportCsv() {
   const rows = getVisibleRows();
   const labels = visibleLabels();
   const mode = state.mode;
+  const hasNames = rows.some((r) => r.name !== undefined);
   const header = ['場所', 'R', '馬番'];
+  if (hasNames) header.push('馬名');
   for (const label of labels) {
     const name = labelDisplayName(label);
     if (NO_RANK_LABELS.has(label)) { header.push(name); continue; }
@@ -523,6 +545,7 @@ function exportCsv() {
   const lines = [header.join(',')];
   for (const r of rows) {
     const cols = [PLACE_NAMES[r.placeCode] || r.placeCode, r.race, r.uma];
+    if (hasNames) cols.push(r.name || '');
     for (const label of labels) {
       if (NO_RANK_LABELS.has(label)) { cols.push(r.scores[label] !== undefined ? r.scores[label] : ''); continue; }
       if (mode !== 'rank') cols.push(r.scores[label] !== undefined ? r.scores[label] : '');
