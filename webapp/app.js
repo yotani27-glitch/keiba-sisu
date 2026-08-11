@@ -181,7 +181,9 @@ function decodeCsv(buffer) {
 }
 
 // ---------- CSVパース＆ID分解 ----------
-const FILE_NAME_RE = /^([A-Za-z0-9]+?)(\d{8})\.csv$/i;
+// ラベル+日付.csv（例: 1tua20260808.csv）か、日付のみ.csv（例: 厩舎Finish-Up/20260808.csv、
+// この場合は親フォルダ名をラベルとして使う）のどちらにも対応する。
+const FILE_NAME_RE = /^([A-Za-z0-9]*)(\d{8})\.csv$/i;
 
 // 馬名対応ファイル(例: name20260808.csv)のラベル名。中身は "18桁ID,馬名" で、指数と違い数値ではなく文字列。
 const NAME_LABEL = 'name';
@@ -197,11 +199,12 @@ function decodeKey(id18) {
   };
 }
 
-function processCsvEntry(filename, text) {
+function processCsvEntry(filename, text, folderLabel) {
   const base = filename.split('/').pop();
   const m = base.match(FILE_NAME_RE);
   if (!m) return 0;
-  const label = m[1];
+  const label = m[1] || folderLabel;
+  if (!label) return 0;
   const isNameFile = label.toLowerCase() === NAME_LABEL;
   let count = 0;
   for (const rawLine of text.split(/\r?\n/)) {
@@ -261,14 +264,14 @@ function finalizeRecords() {
 }
 
 // ---------- フォルダ走査 ----------
-async function collectFilesFromHandle(dirHandle, out, depth = 0) {
+async function collectFilesFromHandle(dirHandle, out, depth = 0, folderLabel = '') {
   if (depth > 5) return;
   for await (const [name, handle] of dirHandle.entries()) {
     if (handle.kind === 'file') {
-      if (/\.zip$/i.test(name)) out.push({ name, kind: 'zip', handle });
-      else if (/\.csv$/i.test(name)) out.push({ name, kind: 'csv', handle });
+      if (/\.zip$/i.test(name)) out.push({ name, kind: 'zip', handle, folderLabel });
+      else if (/\.csv$/i.test(name)) out.push({ name, kind: 'csv', handle, folderLabel });
     } else if (handle.kind === 'directory') {
-      await collectFilesFromHandle(handle, out, depth + 1);
+      await collectFilesFromHandle(handle, out, depth + 1, name);
     }
   }
 }
@@ -277,14 +280,15 @@ async function processFileList(files) {
   let csvCount = 0, fileCount = 0;
   for (const f of files) {
     const arrayBuffer = await f.arrayBuffer();
+    const folderLabel = f.folderLabel || (f.webkitRelativePath || '').split('/').slice(-2, -1)[0] || '';
     if (/\.zip$/i.test(f.name)) {
       const entries = await readZipEntries(arrayBuffer);
       for (const entry of entries) {
-        if (processCsvEntry(entry.name, entry.text) > 0) fileCount++;
+        if (processCsvEntry(entry.name, entry.text, folderLabel) > 0) fileCount++;
       }
     } else if (/\.csv$/i.test(f.name)) {
       const text = decodeCsv(arrayBuffer);
-      if (processCsvEntry(f.name, text) > 0) fileCount++;
+      if (processCsvEntry(f.name, text, folderLabel) > 0) fileCount++;
     }
     csvCount++;
   }
@@ -296,7 +300,9 @@ async function loadFromDirectoryHandle(dirHandle) {
   await collectFilesFromHandle(dirHandle, collected);
   const files = [];
   for (const item of collected) {
-    files.push(await item.handle.getFile());
+    const file = await item.handle.getFile();
+    file.folderLabel = item.folderLabel;
+    files.push(file);
   }
   return processFileList(files);
 }
