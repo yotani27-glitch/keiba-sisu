@@ -422,3 +422,17 @@ button.subtle {
   border: 1px solid var(--border);
   border-radius: 4px;
 }
+
+/* 優先スコアの数値と、1位-2位の差 */
+.race-card .pscore {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.race-card li:first-child .pscore { color: var(--text); font-weight: 700; }
+
+.race-card .gap { white-space: nowrap; }
+.race-card .gap.clear { color: var(--solid); font-weight: 700; }
+.race-card .gap.mid { color: var(--muted); }
+.race-card .gap.close { color: var(--rough); }
