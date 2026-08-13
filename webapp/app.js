@@ -592,7 +592,24 @@ function afterLoad({ fileCount }) {
   state.races = buildRaceSummaries();
   populateRaceFilters();
   renderRaceList();
-  notify(`${fileCount}件のファイルを読み込みました`);
+
+  // 馬名ファイル(name<日付>.csv)は別フォルダにあるため選び忘れやすい。
+  // 馬番だけの表示になっていることに気づけるよう伝える
+  const named = [...state.records.values()].filter((r) => r.name).length;
+  if (named === 0) {
+    notify(`${fileCount}件を読み込みました（馬名なし。name${firstLoadedDate()}.csv も一緒に選ぶと馬名が出ます）`);
+  } else {
+    notify(`${fileCount}件のファイルを読み込みました`);
+  }
+}
+
+// 読み込んだ中でいちばん新しい日付。馬名ファイルの案内に使う
+function firstLoadedDate() {
+  let latest = '';
+  for (const r of state.records.values()) {
+    if (r.date > latest) latest = r.date;
+  }
+  return latest || 'YYYYMMDD';
 }
 
 // ---------- レース一覧（優先指数・堅さ判定） ----------

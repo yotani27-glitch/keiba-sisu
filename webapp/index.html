@@ -24,7 +24,13 @@
   <section id="empty" class="empty-state">
     <p>「フォルダを選択して読み込み」を押して、指数CSV（または日次ZIP）が置かれているフォルダを指定してください。</p>
     <p class="hint">対応ブラウザ（Chrome / Edge）では次回以降フォルダ選択が省略され、ボタン1つで再読み込みできます。</p>
-    <p class="hint">iPhone・iPadはフォルダ選択に対応していないため、「ZIP/CSVを選ぶ」から週次ZIP（例: <code>2tua20260809.zip</code>）を選んでください。厩舎Finish-Upは日付だけのファイル名で指数名が分からないので、「厩舎Finish-Upを追加」から別途選びます（無くても残り4指数で優先指数を算出します）。</p>
+    <p class="hint"><strong>iPhone・iPad</strong>はフォルダ選択に対応していないため、「ZIP/CSVを選ぶ」でファイルを直接選びます。<strong>複数まとめて選べます</strong>ので、次の2つを一度に選んでください。</p>
+    <ul class="hint file-list">
+      <li><code>2tua20260809.zip</code> … 週次の指数ZIP（これだけでも優先指数と堅さ判定は出ます）</li>
+      <li><code>name20260809.csv</code> … 馬名。<strong>選ばないと馬番だけの表示になります</strong></li>
+    </ul>
+    <p class="hint">この2つは別フォルダにあるので、あらかじめ同じフォルダ（iCloud DriveやOneDriveなど）にコピーしておくと一度で選べます。<br />
+    厩舎Finish-Upも使う場合は、日付だけのファイル名で指数名が判別できないため「厩舎Finish-Upを追加」から別途選んでください（無くても残り4指数で算出します）。</p>
   </section>
 
   <section id="dashboard" hidden>

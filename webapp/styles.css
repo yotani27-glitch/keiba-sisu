@@ -408,3 +408,17 @@ button.subtle {
   .topbar-actions button { flex: 1 1 auto; }
   .topbar-actions .status-text { flex: 1 0 100%; }
 }
+
+/* 読み込み手順のファイル一覧 */
+.empty-state ul.file-list {
+  margin: 6px 0 10px;
+  padding-left: 20px;
+}
+.empty-state ul.file-list li { margin-bottom: 4px; }
+.empty-state code {
+  padding: 1px 5px;
+  font-size: 0.92em;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
