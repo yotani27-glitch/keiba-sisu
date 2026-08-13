@@ -365,7 +365,6 @@ const BREAKDOWN = [
   ['6tua', 'S'],
   ['11tua', 'ar'],
   ['厩舎Finish-Up', '厩'],
-  ['8tua', 'T'],
 ];
 
 const BREAKDOWN_TITLES = Object.fromEntries(
@@ -464,6 +463,8 @@ function buildRaceSummaries() {
       race: Number(race),
       fieldSize: group.length,
       top: byPriority.slice(0, 5),
+      // カードには全頭を馬番順で並べる（出馬表やオッズ画面と突き合わせやすい）
+      byUma: [...group].sort((a, b) => a.uma - b.uma),
       all: byPriority,
       gap: byPriority.length >= 2 ? byPriority[0].priority - byPriority[1].priority : null,
       gapBand: byPriority.length >= 2
@@ -720,8 +721,9 @@ function renderRaceList() {
       ? `<span class="firmness ${f.key}">${f.label}<em>${src}基準 · 優先1位の勝率 ${f.winRate.toFixed(1)}%</em></span>`
       : `<span class="firmness unknown">判定不可<em>予想人気(GYN)なし</em></span>`;
     const pop = r.popular || [];
-    const horses = r.top.map((h) => `
-      <li${pop.includes(h.uma) ? ' class="is-popular"' : ''}>
+    // 馬番順に並べるので、優先順位はクラスで示す（先頭行＝1位ではなくなる）
+    const horses = r.byUma.map((h) => `
+      <li class="${h.priorityRank <= 2 ? `p${h.priorityRank}` : ''}${pop.includes(h.uma) ? ' is-popular' : ''}">
         <div class="hrow">
           <span class="prank">${h.priorityRank}</span>
           <span class="uma">${h.uma}番</span>

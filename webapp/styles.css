@@ -346,7 +346,9 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
   background: var(--border);
   color: var(--text);
 }
-.race-card li:first-child .prank { background: var(--gold); }
+/* 馬番順に並べるため、優先1位・2位は行の位置ではなくクラスで示す */
+.race-card li.p1 .prank { background: var(--gold); }
+.race-card li.p2 .prank { background: var(--rank2-blue); }
 .race-card .uma { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .race-card .hname { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .race-card .gyn { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
@@ -434,7 +436,7 @@ button.subtle {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
-.race-card li:first-child .pscore { color: var(--text); font-weight: 700; }
+.race-card li.p1 .pscore { color: var(--text); font-weight: 700; }
 
 /* 1位-2位の差 */
 
@@ -465,9 +467,6 @@ button.subtle {
 .race-card .ix i { font-style: normal; color: var(--muted); font-size: 10px; }
 /* 順位はカッコ書きの代わりに小さく添える */
 .race-card .ix b { font-size: 9px; font-weight: 700; color: var(--muted); }
-/* 先頭の優先スコアは内訳と区別する */
-.race-card .ix.score { background: transparent; border-style: dashed; font-weight: 700; }
-.race-card li:first-child .ix.score { border-color: var(--muted); }
 .race-card .ix.r1 { background: var(--gold); border-color: transparent; }
 .race-card .ix.r2 { background: var(--rank2-blue); border-color: transparent; }
 .race-card .ix.r3 { background: var(--rank3-green); border-color: transparent; }
@@ -476,3 +475,16 @@ button.subtle {
 .race-card .ix.r3 i, .race-card .ix.r3 b { color: inherit; opacity: .75; }
 .chip-note.legend { flex: 1 0 100%; font-size: 11px; }
 .chip-note.legend b { color: var(--text); font-weight: 700; }
+
+/* 全頭を馬番順に並べるので、優先上位2頭は行ごと目立たせる */
+.race-card ol.horses li.p1,
+.race-card ol.horses li.p2 { border-radius: 6px; }
+.race-card ol.horses li.p1 { background: color-mix(in srgb, var(--gold) 35%, transparent); }
+.race-card ol.horses li.p2 { background: color-mix(in srgb, var(--rank2-blue) 35%, transparent); }
+/* 当日人気に指定した馬は枠線で示す（背景は優先順位に譲る） */
+.race-card ol.horses li.is-popular {
+  background: none;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
