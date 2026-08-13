@@ -71,6 +71,7 @@ const state = {
   races: [],  // レース単位のサマリ（優先指数・堅さ判定）
   raceFilters: { date: '', place: '', firmness: '' },
   view: 'races',
+  popular: new Map(), // レースキー -> [人気1位の馬番, 人気2位の馬番]
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -347,6 +348,29 @@ const FIRMNESS = {
   0: { key: 'rough', label: '荒れそう', winRate: 17.1, place: 45.2 },
 };
 
+// 当日の確定人気を入れた場合の実測値。2022-2026年の15,367レースで、
+// GYN基準(上)より分離が鋭い。レース当日はこちらを使う。
+const FIRMNESS_ODDS = {
+  2: { key: 'solid', label: '堅そう', winRate: 31.9, place: 64.9 },
+  1: { key: 'normal', label: '標準', winRate: 24.8, place: 55.0 },
+  0: { key: 'rough', label: '荒れそう', winRate: 11.0, place: 35.1 },
+};
+
+// 当日入力した人気上位2頭。レース単位で localStorage に残す
+const POPULAR_STORE = 'keiba-popular-v1';
+
+function loadPopular() {
+  try {
+    return new Map(Object.entries(JSON.parse(localStorage.getItem(POPULAR_STORE) || '{}')));
+  } catch { return new Map(); }
+}
+
+function savePopular() {
+  try {
+    localStorage.setItem(POPULAR_STORE, JSON.stringify(Object.fromEntries(state.popular)));
+  } catch { /* 保存できなくても表示は続行する */ }
+}
+
 // 読み込み済みレコードから、レース単位のサマリを作る
 function buildRaceSummaries() {
   const groups = new Map();
@@ -373,6 +397,14 @@ function buildRaceSummaries() {
       agree = topGyn.filter((u) => topPriority.has(u)).length;
     }
 
+    // 当日の確定人気を入れてあれば、そちらを優先して判定し直す
+    const topPriority = new Set(byPriority.slice(0, 2).map((r) => r.uma));
+    const entered = state.popular.get(gKey);
+    let agreeOdds = null;
+    if (Array.isArray(entered) && entered.length === 2) {
+      agreeOdds = entered.filter((u) => topPriority.has(u)).length;
+    }
+
     races.push({
       key: gKey,
       date,
@@ -381,8 +413,13 @@ function buildRaceSummaries() {
       race: Number(race),
       fieldSize: group.length,
       top: byPriority.slice(0, 5),
+      all: byPriority,
       agree,
-      firmness: agree === null ? null : FIRMNESS[agree],
+      agreeOdds,
+      popular: entered || null,
+      firmness: agreeOdds !== null ? FIRMNESS_ODDS[agreeOdds]
+        : (agree === null ? null : FIRMNESS[agree]),
+      byOdds: agreeOdds !== null,
       basis: byPriority[0].priorityBasis,
     });
   }
@@ -563,18 +600,20 @@ function renderRaceList() {
 
   els.raceList.innerHTML = races.map((r) => {
     const f = r.firmness;
+    const src = r.byOdds ? '当日人気' : '予想人気';
     const badge = f
-      ? `<span class="firmness ${f.key}">${f.label}<em>優先1位の勝率 ${f.winRate}%</em></span>`
+      ? `<span class="firmness ${f.key}">${f.label}<em>${src}基準 · 優先1位の勝率 ${f.winRate.toFixed(1)}%</em></span>`
       : `<span class="firmness unknown">判定不可<em>予想人気(GYN)なし</em></span>`;
+    const pop = r.popular || [];
     const horses = r.top.map((h) => `
-      <li>
+      <li${pop.includes(h.uma) ? ' class="is-popular"' : ''}>
         <span class="prank">${h.priorityRank}</span>
         <span class="uma">${h.uma}番</span>
         <span class="hname">${h.name ? escapeHtml(h.name) : ''}</span>
         ${h.scores['GYN'] !== undefined ? `<span class="gyn">予想${h.scores['GYN']}人気</span>` : ''}
       </li>`).join('');
     return `
-      <article class="race-card ${f ? f.key : 'unknown'}">
+      <article class="race-card ${f ? f.key : 'unknown'}${r.byOdds ? ' confirmed' : ''}">
         <header>
           <div class="rtitle">
             <strong>${formatDate(r.date)} ${r.place} ${r.race}R</strong>
@@ -583,6 +622,15 @@ function renderRaceList() {
           ${badge}
         </header>
         <ol class="horses">${horses}</ol>
+        <div class="popular-input" data-race="${r.key}">
+          <label>当日の人気</label>
+          <input type="number" inputmode="numeric" min="1" max="${r.fieldSize}"
+                 data-slot="0" value="${pop[0] ?? ''}" placeholder="1番人気" aria-label="1番人気の馬番" />
+          <input type="number" inputmode="numeric" min="1" max="${r.fieldSize}"
+                 data-slot="1" value="${pop[1] ?? ''}" placeholder="2番人気" aria-label="2番人気の馬番" />
+          <span class="unit">番</span>
+          ${pop.length === 2 ? '<button type="button" class="clear-pop" aria-label="当日人気をクリア">×</button>' : ''}
+        </div>
       </article>`;
   }).join('');
 }
@@ -858,6 +906,41 @@ els.firmnessSelect.addEventListener('change', () => {
   renderRaceList();
 });
 
+// 当日の人気1位・2位の馬番を入れると、確定オッズ基準で判定し直す
+els.raceList.addEventListener('change', (ev) => {
+  const input = ev.target.closest('input[data-slot]');
+  if (!input) return;
+  const box = input.closest('.popular-input');
+  const key = box.dataset.race;
+  const nums = [...box.querySelectorAll('input[data-slot]')]
+    .map((i) => Number(i.value))
+    .filter((n) => Number.isInteger(n) && n > 0);
+
+  // 2頭そろって、かつ別の馬のときだけ判定に使う
+  const ready = nums.length === 2 && nums[0] !== nums[1];
+  const had = state.popular.has(key);
+  if (ready) {
+    state.popular.set(key, nums);
+  } else {
+    state.popular.delete(key);
+  }
+  savePopular();
+
+  // 1頭目を入れただけの段階で描画し直すと入力欄が作り直されて
+  // フォーカスと入力中の値が飛ぶ。判定が変わるときだけ再描画する。
+  if (!ready && !had) return;
+  state.races = buildRaceSummaries();
+  renderRaceList();
+});
+
+els.raceList.addEventListener('click', (ev) => {
+  if (!ev.target.classList.contains('clear-pop')) return;
+  state.popular.delete(ev.target.closest('.popular-input').dataset.race);
+  savePopular();
+  state.races = buildRaceSummaries();
+  renderRaceList();
+});
+
 els.dateSelect.addEventListener('change', () => {
   state.filters.date = els.dateSelect.value;
   updatePlaceOptions();
@@ -916,3 +999,6 @@ els.table.addEventListener('click', (e) => {
   }
   renderTable();
 });
+
+// 当日入力した人気は再読み込みしても残す
+state.popular = loadPopular();
