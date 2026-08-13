@@ -14,6 +14,8 @@
   </div>
   <div class="topbar-actions">
     <button id="loadButton" class="primary">フォルダを選択して読み込み</button>
+    <button id="fileButton">ZIP/CSVを選ぶ</button>
+    <button id="kyushaButton" class="subtle">厩舎Finish-Upを追加</button>
     <span id="loadStatus" class="status-text">未読み込み</span>
   </div>
 </header>
@@ -22,6 +24,7 @@
   <section id="empty" class="empty-state">
     <p>「フォルダを選択して読み込み」を押して、指数CSV（または日次ZIP）が置かれているフォルダを指定してください。</p>
     <p class="hint">対応ブラウザ（Chrome / Edge）では次回以降フォルダ選択が省略され、ボタン1つで再読み込みできます。</p>
+    <p class="hint">iPhone・iPadはフォルダ選択に対応していないため、「ZIP/CSVを選ぶ」から週次ZIP（例: <code>2tua20260809.zip</code>）を選んでください。厩舎Finish-Upは日付だけのファイル名で指数名が分からないので、「厩舎Finish-Upを追加」から別途選びます（無くても残り4指数で優先指数を算出します）。</p>
   </section>
 
   <section id="dashboard" hidden>

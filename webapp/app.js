@@ -62,6 +62,7 @@ const state = {
   records: new Map(),   // key: date|placeCode|race|uma -> record
   labels: new Set(),    // 指数ラベル一覧 (例: '00','1',...,'11','gallop','GYN')
   hiddenLabels: new Set(),
+  knownLabels: new Set(), // 前回の読み込み時点で存在したラベル
   loadedAt: null,
   rootName: '',
   filters: { date: '', place: '', race: '' },
@@ -77,6 +78,8 @@ const state = {
 const $ = (sel) => document.querySelector(sel);
 const els = {
   loadButton: $('#loadButton'),
+  fileButton: $('#fileButton'),
+  kyushaButton: $('#kyushaButton'),
   loadStatus: $('#loadStatus'),
   empty: $('#empty'),
   dashboard: $('#dashboard'),
@@ -240,12 +243,17 @@ function decodeKey(id18) {
   };
 }
 
+// ラベルが決められなかったCSVの本数。iPhoneでファイルを個別に選ぶと
+// フォルダ名が取れず、厩舎Finish-Upのような「日付だけのファイル名」は
+// 指数名が分からなくなる。読み飛ばした件数を伝えるために数えておく。
+let skippedUnlabeled = 0;
+
 function processCsvEntry(filename, text, folderLabel) {
   const base = filename.split('/').pop();
   const m = base.match(FILE_NAME_RE);
   if (!m) return 0;
   const label = m[1] || folderLabel;
-  if (!label) return 0;
+  if (!label) { skippedUnlabeled++; return 0; }
   const isNameFile = label.toLowerCase() === NAME_LABEL;
   let count = 0;
   for (const rawLine of text.split(/\r?\n/)) {
@@ -443,11 +451,12 @@ async function collectFilesFromHandle(dirHandle, out, depth = 0, folderLabel = '
   }
 }
 
-async function processFileList(files) {
+async function processFileList(files, forcedLabel = '') {
   let csvCount = 0, fileCount = 0;
   for (const f of files) {
     const arrayBuffer = await f.arrayBuffer();
-    const folderLabel = f.folderLabel || (f.webkitRelativePath || '').split('/').slice(-2, -1)[0] || '';
+    const folderLabel = forcedLabel || f.folderLabel
+      || (f.webkitRelativePath || '').split('/').slice(-2, -1)[0] || '';
     if (/\.zip$/i.test(f.name)) {
       const entries = await readZipEntries(arrayBuffer);
       for (const entry of entries) {
@@ -525,6 +534,36 @@ function createFallbackInput() {
   return input;
 }
 
+// ---------- ファイル単体選択（iPhone/iPad用） ----------
+// iOSはフォルダ選択に対応していない（showDirectoryPickerが無く、
+// webkitdirectoryも効かない）ので、週次ZIPを1つ選ぶ経路を用意する。
+// 追加読み込みできるよう、既存の記録は消さずに重ねる。
+function createFilePicker(id, accept, forcedLabel, rootName) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = accept;
+  input.multiple = true;
+  input.style.display = 'none';
+  input.addEventListener('change', async () => {
+    const files = Array.from(input.files);
+    input.value = '';
+    if (!files.length) return;
+    try {
+      skippedUnlabeled = 0;
+      state.rootName = rootName;
+      const result = await processFileList(files, forcedLabel);
+      afterLoad(result);
+      if (skippedUnlabeled > 0) {
+        notify(`${skippedUnlabeled}件は指数名が判別できず読み飛ばしました（厩舎Finish-Upは専用ボタンから追加してください）`);
+      }
+    } catch (err) {
+      notify(err.message || '読み込みに失敗しました');
+    }
+  });
+  document.body.appendChild(input);
+  return input;
+}
+
 function afterLoad({ fileCount }) {
   finalizeRecords();
   state.loadedAt = new Date();
@@ -533,10 +572,20 @@ function afterLoad({ fileCount }) {
     notify('指数CSVが見つかりませんでした（ファイル名の形式をご確認ください）');
     return;
   }
+  const firstLoad = els.dashboard.hidden;
   els.empty.hidden = true;
   els.dashboard.hidden = false;
-  // 指数の種類が多いため、既定では何も表示せず「指数を選択」から選んでもらう
-  state.hiddenLabels = new Set(state.labels);
+  if (firstLoad) {
+    // 指数の種類が多いため、既定では何も表示せず「指数を選択」から選んでもらう
+    state.hiddenLabels = new Set(state.labels);
+  } else {
+    // 追加読み込み（厩舎Finish-Upなど）では、それまでの表示設定を残す。
+    // 新しく増えたラベルだけ非表示側に足す
+    for (const l of state.labels) {
+      if (!state.knownLabels.has(l)) state.hiddenLabels.add(l);
+    }
+  }
+  state.knownLabels = new Set(state.labels);
   populateFilterOptions();
   renderColumnMenu();
   renderTable();
@@ -878,6 +927,26 @@ function exportYearCsv() {
 
 // ---------- イベント ----------
 els.loadButton.addEventListener('click', handleLoadClick);
+
+// iPhoneなどフォルダ選択が使えない環境向け。ファイルを直接選ぶ
+els.fileButton.addEventListener('click', () => {
+  els.filePicker = els.filePicker
+    || createFilePicker('filePicker', '.zip,.csv', '', 'ファイル選択');
+  els.filePicker.click();
+});
+
+// 厩舎Finish-Upは日付だけのファイル名なので、指数名を指定して読み込む
+els.kyushaButton.addEventListener('click', () => {
+  els.kyushaPicker = els.kyushaPicker
+    || createFilePicker('kyushaPicker', '.csv,.zip', '厩舎Finish-Up', '厩舎Finish-Up追加');
+  els.kyushaPicker.click();
+});
+
+// フォルダ選択が使えない環境では、そちらのボタンを目立たせない
+if (typeof window.showDirectoryPicker !== 'function') {
+  els.loadButton.classList.remove('primary');
+  els.fileButton.classList.add('primary');
+}
 
 function switchView(view) {
   state.view = view;
