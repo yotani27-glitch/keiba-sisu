@@ -875,8 +875,14 @@ function renderRaceList() {
       : `<span class="firmness unknown">判定不可<em>予想人気(GYN)なし</em></span>`;
     const pop = r.popular || [];
     // 馬番順に並べるので、優先順位はクラスで示す（先頭行＝1位ではなくなる）
-    const horses = r.byUma.map((h) => `
-      <li class="${h.priorityRank <= 2 ? `p${h.priorityRank}` : ''}${pop.includes(h.uma) ? ' is-popular' : ''}">
+    const horses = r.byUma.map((h) => {
+      const popularRank = pop.indexOf(h.uma) + 1;
+      const classes = [
+        h.priorityRank <= 2 ? `p${h.priorityRank}` : '',
+        popularRank > 0 ? `is-popular pop${popularRank}` : '',
+      ].filter(Boolean).join(' ');
+      return `
+      <li class="${classes}">
         <div class="hrow">
           <span class="prank">${h.priorityRank}</span>
           <span class="uma">${h.uma}番</span>
@@ -885,7 +891,8 @@ function renderRaceList() {
           ${h.scores['GYN'] !== undefined ? `<span class="gyn">予想${h.scores['GYN']}人気</span>` : ''}
         </div>
         ${breakdownHtml(h)}
-      </li>`).join('');
+      </li>`;
+    }).join('');
     return `
       <article class="race-card ${f ? f.key : 'unknown'}${r.byOdds ? ' confirmed' : ''}">
         <header>
