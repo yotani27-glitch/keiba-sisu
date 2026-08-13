@@ -475,7 +475,7 @@ button.subtle {
 .race-card li.fp1 .fpscore { font-weight: 700; }
 .race-card .score-strength {
   display: inline-block;
-  margin-left: 3px;
+  margin-right: 3px;
   padding: 0 3px;
   border-radius: 3px;
   font-size: 9px;
