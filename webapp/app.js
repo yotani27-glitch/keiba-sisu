@@ -108,6 +108,7 @@ const els = {
   raceDateSelect: $('#raceDateSelect'),
   racePlaceSelect: $('#racePlaceSelect'),
   firmnessSelect: $('#firmnessSelect'),
+  sharePopButton: $('#sharePopButton'),
   raceSummary: $('#raceSummary'),
   raceList: $('#raceList'),
   raceEmpty: $('#raceEmpty'),
@@ -422,6 +423,34 @@ function savePopular() {
   try {
     localStorage.setItem(POPULAR_STORE, JSON.stringify(Object.fromEntries(state.popular)));
   } catch { /* 保存できなくても表示は続行する */ }
+}
+
+// ---------- 当日人気の受け渡し ----------
+// 入力した人気は数字だけなので、URLに載せて別の端末へ渡せる。
+// 日付ごとに "日付:場コード-R.1位馬番.2位馬番,..." の形にまとめる。
+// サーバーを使わずに済み、#以降なのでアクセス先にも残らない。
+function encodePopular() {
+  const byDate = new Map();
+  for (const [key, nums] of state.popular) {
+    const [date, placeCode, race] = key.split('|');
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date).push(`${placeCode}-${race}.${nums[0]}.${nums[1]}`);
+  }
+  return [...byDate].map(([date, list]) => `${date}:${list.join(',')}`).join(';');
+}
+
+function decodePopular(text) {
+  const out = new Map();
+  for (const chunk of text.split(';')) {
+    const [date, list] = chunk.split(':');
+    if (!date || !list) continue;
+    for (const item of list.split(',')) {
+      const m = item.match(/^(\d+)-(\d+)\.(\d+)\.(\d+)$/);
+      if (!m) continue;
+      out.set(`${date}|${m[1]}|${m[2]}`, [Number(m[3]), Number(m[4])]);
+    }
+  }
+  return out;
 }
 
 // 読み込み済みレコードから、レース単位のサマリを作る
@@ -1112,6 +1141,22 @@ els.kyushaButton.addEventListener('click', () => {
   els.kyushaPicker.click();
 });
 
+// 入力した当日人気を、他の端末へ渡すリンクにする
+els.sharePopButton.addEventListener('click', async () => {
+  if (!state.popular.size) {
+    notify('当日人気がまだ入力されていません');
+    return;
+  }
+  const url = `${location.origin}${location.pathname}#pop=${encodeURIComponent(encodePopular())}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    notify(`${state.popular.size}レース分のリンクをコピーしました`);
+  } catch {
+    // クリップボードが使えない環境では選択できる形で出す
+    window.prompt('このリンクを他の端末で開いてください', url);
+  }
+});
+
 // PCで公開したデータを取りに行く
 els.syncButton.addEventListener('click', async () => {
   try {
@@ -1275,6 +1320,20 @@ function persistHiddenLabels() {
 // 当日入力した人気は再読み込みしても残す
 state.popular = loadPopular();
 
+// 共有リンク（#pop=...）で開かれたときは、そこに入っている人気を取り込む
+const sharedPop = location.hash.match(/[#&]pop=([^&]+)/);
+let importedPop = 0;
+if (sharedPop) {
+  const incoming = decodePopular(decodeURIComponent(sharedPop[1]));
+  for (const [key, nums] of incoming) state.popular.set(key, nums);
+  importedPop = incoming.size;
+  if (importedPop) savePopular();
+  // 取り込んだらURLから消す。hashは replaceState だけでは残ることがあるので
+  // location.hash も明示的に空にする
+  history.replaceState(null, '', location.pathname + location.search);
+  if (location.hash) location.hash = '';
+}
+
 // 起動時の読み込み。PCで公開したデータがあればそれを優先し、
 // 前回と同じ内容なら取り直さずキャッシュを使う。
 (async () => {
@@ -1286,15 +1345,26 @@ state.popular = loadPopular();
 
   const restored = await restoreCache();
 
+  const popMsg = importedPop ? `／当日人気${importedPop}レース分を取り込みました` : '';
+
   if (published && published !== state.publishedDates) {
     try {
       afterLoad(await fetchPublished());
-      notify('最新の公開データを取り込みました');
+      notify('最新の公開データを取り込みました' + popMsg);
       return;
     } catch (err) {
       if (!restored) notify(err.message);
       return;
     }
   }
-  if (restored) notify('前回読み込んだ指数を表示しています');
+  if (restored) {
+    // 共有リンクで人気が増えていれば、判定を出し直す
+    if (importedPop) {
+      state.races = buildRaceSummaries();
+      renderRaceList();
+    }
+    notify('前回読み込んだ指数を表示しています' + popMsg);
+  } else if (importedPop) {
+    notify(`当日人気${importedPop}レース分を取り込みました（指数はこれから読み込んでください）`);
+  }
 })();
