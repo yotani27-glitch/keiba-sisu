@@ -73,11 +73,13 @@ const state = {
   raceFilters: { date: '', place: '', firmness: '' },
   view: 'races',
   popular: new Map(), // レースキー -> [人気1位の馬番, 人気2位の馬番]
+  publishedDates: null, // 取り込み済みの公開データの日付一覧
 };
 
 const $ = (sel) => document.querySelector(sel);
 const els = {
   loadButton: $('#loadButton'),
+  syncButton: $('#syncButton'),
   fileButton: $('#fileButton'),
   kyushaButton: $('#kyushaButton'),
   clearButton: $('#clearButton'),
@@ -612,6 +614,41 @@ function createFilePicker(id, accept, forcedLabel, rootName) {
   return input;
 }
 
+// ---------- 公開データの取り込み ----------
+// PCで publish_data.py を実行して push しておくと、data/ 以下に指数が置かれる。
+// iPhone側はこれを取りに行くので、ファイルを選ばなくても最新データが見られる。
+async function fetchPublished() {
+  const res = await fetch('data/index.json', { cache: 'no-store' });
+  if (!res.ok) throw new Error('公開データが見つかりません');
+  const { dates } = await res.json();
+  if (!dates || !dates.length) throw new Error('公開データが空です');
+  state.publishedDates = dates.join(',');
+
+  state.records.clear();
+  state.labels.clear();
+  let horses = 0;
+  for (const date8 of dates) {
+    const r = await fetch(`data/${date8}.json`, { cache: 'no-store' });
+    if (!r.ok) continue;
+    const recs = await r.json();
+    for (const [id18, scores] of Object.entries(recs)) {
+      const { date, placeCode, kai, day, race, uma } = decodeKey(id18);
+      const key = `${date}|${placeCode}|${race}|${uma}`;
+      const rec = { date, placeCode, kai, day, race, uma, scores: {}, ranks: {} };
+      for (const [label, val] of Object.entries(scores)) {
+        if (label === 'name') { rec.name = val; continue; }
+        const num = Number(val);
+        if (!Number.isNaN(num)) { rec.scores[label] = num; state.labels.add(label); }
+      }
+      state.records.set(key, rec);
+      horses++;
+    }
+  }
+  if (!horses) throw new Error('公開データを読み取れませんでした');
+  state.rootName = '公開データ';
+  return { fileCount: dates.length };
+}
+
 // ---------- 読み込んだデータの保存・復元 ----------
 // 毎回ファイルを選び直すのは手間なので、読み込んだ指数をブラウザに残す。
 // 順位や優先スコアは保存せず、生の値だけを残して復元時に計算し直す。
@@ -623,6 +660,7 @@ async function saveCache() {
     await idbSet(CACHE_KEY, {
       savedAt: Date.now(),
       rootName: state.rootName,
+      publishedDates: state.publishedDates,
       hiddenLabels: [...state.hiddenLabels],
       records: [...state.records.values()].map((r) => ({
         date: r.date, placeCode: r.placeCode, kai: r.kai, day: r.day,
@@ -647,6 +685,7 @@ async function restoreCache() {
     for (const label of Object.keys(r.scores || {})) state.labels.add(label);
   }
   state.rootName = cached.rootName || '前回の読み込み';
+  state.publishedDates = cached.publishedDates || null;
   state.hiddenLabels = new Set(cached.hiddenLabels || state.labels);
   state.knownLabels = new Set(state.labels);
 
@@ -1073,6 +1112,16 @@ els.kyushaButton.addEventListener('click', () => {
   els.kyushaPicker.click();
 });
 
+// PCで公開したデータを取りに行く
+els.syncButton.addEventListener('click', async () => {
+  try {
+    afterLoad(await fetchPublished());
+    notify('最新の公開データを取り込みました');
+  } catch (err) {
+    notify(err.message || '公開データを取得できませんでした');
+  }
+});
+
 // 保存済みの指数と、当日入力した人気をまとめて消す
 els.clearButton.addEventListener('click', async () => {
   await idbSet(CACHE_KEY, null).catch(() => {});
@@ -1226,7 +1275,26 @@ function persistHiddenLabels() {
 // 当日入力した人気は再読み込みしても残す
 state.popular = loadPopular();
 
-// 前回読み込んだ指数があれば、ファイルを選ばずにそのまま表示する
-restoreCache().then((ok) => {
-  if (ok) notify('前回読み込んだ指数を表示しています');
-});
+// 起動時の読み込み。PCで公開したデータがあればそれを優先し、
+// 前回と同じ内容なら取り直さずキャッシュを使う。
+(async () => {
+  let published = null;
+  try {
+    const res = await fetch('data/index.json', { cache: 'no-store' });
+    if (res.ok) published = (await res.json()).dates?.join(',') || null;
+  } catch { /* 公開データ無し・オフラインならキャッシュに任せる */ }
+
+  const restored = await restoreCache();
+
+  if (published && published !== state.publishedDates) {
+    try {
+      afterLoad(await fetchPublished());
+      notify('最新の公開データを取り込みました');
+      return;
+    } catch (err) {
+      if (!restored) notify(err.message);
+      return;
+    }
+  }
+  if (restored) notify('前回読み込んだ指数を表示しています');
+})();
