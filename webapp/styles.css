@@ -459,6 +459,22 @@ button.subtle {
   align-items: flex-end;
   gap: 1px;
 }
+.race-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 12px 8px;
+}
+.race-actions .x-post-button {
+  padding: 5px 10px;
+  border-color: #111827;
+  background: #111827;
+  color: #fff;
+  font-weight: 700;
+}
+.race-actions .x-post-button:hover { border-color: var(--accent); }
+@media (prefers-color-scheme: dark) {
+  .race-actions .x-post-button { border-color: #f9fafb; background: #f9fafb; color: #111827; }
+}
 .race-card .pscore,
 .race-card .fpscore {
   flex: 0 0 auto;

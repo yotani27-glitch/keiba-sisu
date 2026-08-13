@@ -960,6 +960,9 @@ function renderRaceList() {
           ${badge}
         </header>
         <ol class="horses">${horses}</ol>
+        <div class="race-actions">
+          <button type="button" class="x-post-button" data-race="${r.key}" aria-label="${r.place} ${r.race}Rの全馬をXへ投稿">Xへ投稿</button>
+        </div>
         <div class="popular-input" data-race="${r.key}">
           <label>当日の人気</label>
           <input type="number" inputmode="numeric" min="1" max="${r.fieldSize}"
@@ -976,6 +979,26 @@ function renderRaceList() {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// X投稿用本文。全馬を収めやすいよう、項目名は見出しにまとめ、優先値は小数2桁にする。
+function racePostText(race) {
+  const rows = race.byUma.map((h) => {
+    const name = h.name ? String(h.name).trim() : '馬名なし';
+    return `${h.uma} ${name} ${h.priority.toFixed(2)}`;
+  });
+  return `${race.place} ${race.race}R\n馬番 馬名 優先値\n${rows.join('\n')}`;
+}
+
+function openRacePost(raceKey) {
+  const race = state.races.find((r) => r.key === raceKey);
+  if (!race) return;
+  const text = racePostText(race);
+  window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`,
+    '_blank', 'noopener,noreferrer');
+  if (text.length > 280) {
+    notify(`全馬分は${text.length}文字です。通常投稿に収まらない場合はX側で調整してください`);
+  }
 }
 
 // ---------- フィルタUI ----------
@@ -1333,6 +1356,11 @@ els.raceList.addEventListener('change', (ev) => {
 });
 
 els.raceList.addEventListener('click', (ev) => {
+  const postButton = ev.target.closest('.x-post-button');
+  if (postButton) {
+    openRacePost(postButton.dataset.race);
+    return;
+  }
   const strength = ev.target.closest('.score-strength');
   if (strength) {
     const willOpen = !strength.classList.contains('show-tip');
