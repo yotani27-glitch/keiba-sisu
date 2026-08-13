@@ -80,6 +80,7 @@ const els = {
   loadButton: $('#loadButton'),
   fileButton: $('#fileButton'),
   kyushaButton: $('#kyushaButton'),
+  clearButton: $('#clearButton'),
   loadStatus: $('#loadStatus'),
   empty: $('#empty'),
   dashboard: $('#dashboard'),
@@ -611,6 +612,60 @@ function createFilePicker(id, accept, forcedLabel, rootName) {
   return input;
 }
 
+// ---------- 読み込んだデータの保存・復元 ----------
+// 毎回ファイルを選び直すのは手間なので、読み込んだ指数をブラウザに残す。
+// 順位や優先スコアは保存せず、生の値だけを残して復元時に計算し直す。
+// そうしておけば、あとで重みや対象指数を変えても古い結果が残らない。
+const CACHE_KEY = 'records';
+
+async function saveCache() {
+  try {
+    await idbSet(CACHE_KEY, {
+      savedAt: Date.now(),
+      rootName: state.rootName,
+      hiddenLabels: [...state.hiddenLabels],
+      records: [...state.records.values()].map((r) => ({
+        date: r.date, placeCode: r.placeCode, kai: r.kai, day: r.day,
+        race: r.race, uma: r.uma, name: r.name, scores: r.scores,
+      })),
+    });
+  } catch { /* 保存できなくても動作は続ける */ }
+}
+
+async function restoreCache() {
+  let cached;
+  try {
+    cached = await idbGet(CACHE_KEY);
+  } catch { return false; }
+  if (!cached || !cached.records || !cached.records.length) return false;
+
+  state.records.clear();
+  state.labels.clear();
+  for (const r of cached.records) {
+    const key = `${r.date}|${r.placeCode}|${r.race}|${r.uma}`;
+    state.records.set(key, { ...r, scores: r.scores || {}, ranks: {} });
+    for (const label of Object.keys(r.scores || {})) state.labels.add(label);
+  }
+  state.rootName = cached.rootName || '前回の読み込み';
+  state.hiddenLabels = new Set(cached.hiddenLabels || state.labels);
+  state.knownLabels = new Set(state.labels);
+
+  finalizeRecords();
+  els.empty.hidden = true;
+  els.dashboard.hidden = false;
+  populateFilterOptions();
+  renderColumnMenu();
+  renderTable();
+  state.races = buildRaceSummaries();
+  populateRaceFilters();
+  renderRaceList();
+
+  const when = new Date(cached.savedAt).toLocaleString('ja-JP', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  els.loadStatus.textContent = `${state.rootName} / ${state.records.size}頭 / ${when}に読込`;
+  return true;
+}
+
 function afterLoad({ fileCount }) {
   finalizeRecords();
   state.loadedAt = new Date();
@@ -648,6 +703,8 @@ function afterLoad({ fileCount }) {
   } else {
     notify(`${fileCount}件のファイルを読み込みました`);
   }
+
+  saveCache();
 }
 
 // 読み込んだ中でいちばん新しい日付。馬名ファイルの案内に使う
@@ -1016,6 +1073,21 @@ els.kyushaButton.addEventListener('click', () => {
   els.kyushaPicker.click();
 });
 
+// 保存済みの指数と、当日入力した人気をまとめて消す
+els.clearButton.addEventListener('click', async () => {
+  await idbSet(CACHE_KEY, null).catch(() => {});
+  state.popular.clear();
+  savePopular();
+  state.records.clear();
+  state.labels.clear();
+  state.knownLabels = new Set();
+  state.races = [];
+  els.dashboard.hidden = true;
+  els.empty.hidden = false;
+  els.loadStatus.textContent = '未読み込み';
+  notify('保存データを消しました');
+});
+
 // フォルダ選択が使えない環境では、そちらのボタンを目立たせない
 if (typeof window.showDirectoryPicker !== 'function') {
   els.loadButton.classList.remove('primary');
@@ -1121,6 +1193,7 @@ els.columnMenu.addEventListener('click', (e) => {
   const action = e.target.dataset.action;
   if (action === 'all') { state.hiddenLabels.clear(); renderColumnMenu(); renderTable(); }
   if (action === 'none') { state.hiddenLabels = new Set(state.labels); renderColumnMenu(); renderTable(); }
+  if (action === 'all' || action === 'none') persistHiddenLabels();
 });
 els.columnMenu.addEventListener('change', (e) => {
   const label = e.target.dataset.label;
@@ -1129,6 +1202,7 @@ els.columnMenu.addEventListener('change', (e) => {
   else state.hiddenLabels.add(label);
   updateColumnCount();
   renderTable();
+  persistHiddenLabels();
 });
 
 els.table.addEventListener('click', (e) => {
@@ -1143,5 +1217,16 @@ els.table.addEventListener('click', (e) => {
   renderTable();
 });
 
+// 指数の表示選択を変えたら、その状態も残しておく
+function persistHiddenLabels() {
+  if (!state.records.size) return;
+  saveCache();
+}
+
 // 当日入力した人気は再読み込みしても残す
 state.popular = loadPopular();
+
+// 前回読み込んだ指数があれば、ファイルを選ばずにそのまま表示する
+restoreCache().then((ok) => {
+  if (ok) notify('前回読み込んだ指数を表示しています');
+});
