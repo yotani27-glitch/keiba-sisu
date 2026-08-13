@@ -10,6 +10,8 @@
   --gold: #fde68a;
   --rank2-blue: #bfdbfe;
   --rank3-green: #bbf7d0;
+  --popular1-border: #b45309;
+  --popular2-border: #1d4ed8;
   font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
@@ -23,6 +25,8 @@
     --gold: #6b5b1f;
     --rank2-blue: #1e3a5f;
     --rank3-green: #1f4d2e;
+    --popular1-border: #facc15;
+    --popular2-border: #60a5fa;
   }
 }
 
@@ -381,8 +385,8 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
   border: 1px solid var(--border);
   border-radius: 6px;
 }
-.popular-input input[data-slot="0"] { border-color: var(--gold); }
-.popular-input input[data-slot="1"] { border-color: var(--rank2-blue); }
+.popular-input input[data-slot="0"] { border: 2px solid var(--popular1-border); }
+.popular-input input[data-slot="1"] { border: 2px solid var(--popular2-border); }
 .popular-input input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .popular-input .unit { flex: 0 0 auto; }
 .popular-input .clear-pop {
@@ -491,9 +495,9 @@ button.subtle {
 .race-card ol.horses li.p2 { background: color-mix(in srgb, var(--rank2-blue) 35%, transparent); }
 /* 当日人気は1番人気=黄・2番人気=青の枠線で示す。背景の優先順位色とは重ねて表示する */
 .race-card ol.horses li.is-popular {
-  outline: 2px solid transparent;
-  outline-offset: -2px;
+  outline: 3px solid transparent;
+  outline-offset: -3px;
   border-radius: 6px;
 }
-.race-card ol.horses li.pop1 { outline-color: var(--gold); }
-.race-card ol.horses li.pop2 { outline-color: var(--rank2-blue); }
+.race-card ol.horses li.pop1 { outline-color: var(--popular1-border); }
+.race-card ol.horses li.pop2 { outline-color: var(--popular2-border); }
