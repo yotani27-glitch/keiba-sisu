@@ -358,6 +358,35 @@ function gapBand(gap) {
   return GAP_BANDS.find((b) => gap >= b.min);
 }
 
+// ---------- カードに並べる内訳指数 ----------
+// 表示順。ラベルは短くしないと横に収まらない
+const BREAKDOWN = [
+  ['7tua', 'F'],
+  ['6tua', 'S'],
+  ['11tua', 'ar'],
+  ['厩舎Finish-Up', '厩'],
+  ['8tua', 'T'],
+];
+
+const BREAKDOWN_TITLES = Object.fromEntries(
+  BREAKDOWN.map(([label]) => [label, LABEL_NAMES[label] || label]));
+
+// 値と、そのレース内での順位を並べて出す。1〜3位は既存の表と同じ色を付ける
+function breakdownHtml(rec) {
+  const chips = [];
+  for (const [label, short] of BREAKDOWN) {
+    const val = rec.scores[label];
+    if (val === undefined) continue;
+    const rank = rec.ranks[label];
+    const cls = rank >= 1 && rank <= 3 ? ` r${rank}` : '';
+    // 値と順位が数字として続くと読めないので、順位はカッコで包む
+    chips.push(
+      `<span class="ix${cls}" title="${BREAKDOWN_TITLES[label]} 値${val}${rank ? ` / ${rank}位` : ''}">`
+      + `<i>${short}</i>${val}` + (rank ? `<b>(${rank})</b>` : '') + '</span>');
+  }
+  return chips.length ? `<div class="breakdown">${chips.join('')}</div>` : '';
+}
+
 // ---------- 堅さ判定 ----------
 // 優先指数の上位2頭と、予想人気(GYN)の上位2頭が何頭重なるかで3段階に分ける。
 // 2026年1,973レースでの実測（優先1位馬の勝率）:
@@ -679,7 +708,10 @@ function renderRaceList() {
     <span class="chip chip-normal">標準 ${counts.normal}</span>
     <span class="chip chip-rough">荒れそう ${counts.rough}</span>
     ${noGyn}
-    <span class="chip-note">全${races.length}レース</span>`;
+    <span class="chip-note">全${races.length}レース</span>
+    <span class="chip-note legend">内訳: ${
+      BREAKDOWN.map(([l, s]) => `<b>${s}</b>=${LABEL_NAMES[l] || l}`).join(' · ')
+    }（値と順位）</span>`;
 
   els.raceList.innerHTML = races.map((r) => {
     const f = r.firmness;
@@ -690,11 +722,14 @@ function renderRaceList() {
     const pop = r.popular || [];
     const horses = r.top.map((h) => `
       <li${pop.includes(h.uma) ? ' class="is-popular"' : ''}>
-        <span class="prank">${h.priorityRank}</span>
-        <span class="uma">${h.uma}番</span>
-        <span class="hname">${h.name ? escapeHtml(h.name) : ''}</span>
-        <span class="pscore" title="優先スコア">${h.priority.toFixed(3)}</span>
-        ${h.scores['GYN'] !== undefined ? `<span class="gyn">予想${h.scores['GYN']}人気</span>` : ''}
+        <div class="hrow">
+          <span class="prank">${h.priorityRank}</span>
+          <span class="uma">${h.uma}番</span>
+          <span class="hname">${h.name ? escapeHtml(h.name) : ''}</span>
+          <span class="pscore" title="優先スコア">${h.priority.toFixed(3)}</span>
+          ${h.scores['GYN'] !== undefined ? `<span class="gyn">予想${h.scores['GYN']}人気</span>` : ''}
+        </div>
+        ${breakdownHtml(h)}
       </li>`).join('');
     return `
       <article class="race-card ${f ? f.key : 'unknown'}${r.byOdds ? ' confirmed' : ''}">

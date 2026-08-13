@@ -277,7 +277,8 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
 
 .race-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* 内訳指数5つと馬名が1行に収まる幅を確保する */
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 12px;
   padding: 0 16px 24px;
 }
@@ -324,11 +325,14 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
 
 .race-card ol.horses { list-style: none; margin: 0; padding: 6px 8px 10px; }
 .race-card ol.horses li {
+  padding: 5px 4px;
+  font-size: 14px;
+}
+/* 1行目: 順位・馬番・馬名・優先スコア・予想人気 */
+.race-card ol.horses .hrow {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 4px;
-  font-size: 14px;
 }
 .race-card .prank {
   flex: 0 0 auto;
@@ -423,7 +427,7 @@ button.subtle {
   border-radius: 4px;
 }
 
-/* 優先スコアの数値と、1位-2位の差 */
+/* 優先スコア（1行目の右寄り）。馬名が長いときは馬名側を省略させる */
 .race-card .pscore {
   flex: 0 0 auto;
   font-size: 12px;
@@ -432,7 +436,43 @@ button.subtle {
 }
 .race-card li:first-child .pscore { color: var(--text); font-weight: 700; }
 
+/* 1位-2位の差 */
+
 .race-card .gap { white-space: nowrap; }
 .race-card .gap.clear { color: var(--solid); font-weight: 700; }
 .race-card .gap.mid { color: var(--muted); }
 .race-card .gap.close { color: var(--rough); }
+
+/* 2行目: 内訳指数（値と順位）。狭いときは折り返す */
+.race-card .breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 3px 0 1px;
+}
+.race-card .ix {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  padding: 1px 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.race-card .ix i { font-style: normal; color: var(--muted); font-size: 10px; }
+/* 順位はカッコ書きの代わりに小さく添える */
+.race-card .ix b { font-size: 9px; font-weight: 700; color: var(--muted); }
+/* 先頭の優先スコアは内訳と区別する */
+.race-card .ix.score { background: transparent; border-style: dashed; font-weight: 700; }
+.race-card li:first-child .ix.score { border-color: var(--muted); }
+.race-card .ix.r1 { background: var(--gold); border-color: transparent; }
+.race-card .ix.r2 { background: var(--rank2-blue); border-color: transparent; }
+.race-card .ix.r3 { background: var(--rank3-green); border-color: transparent; }
+.race-card .ix.r1 i, .race-card .ix.r1 b,
+.race-card .ix.r2 i, .race-card .ix.r2 b,
+.race-card .ix.r3 i, .race-card .ix.r3 b { color: inherit; opacity: .75; }
+.chip-note.legend { flex: 1 0 100%; font-size: 11px; }
+.chip-note.legend b { color: var(--text); font-weight: 700; }
