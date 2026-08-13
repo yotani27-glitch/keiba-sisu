@@ -440,10 +440,17 @@ button.subtle {
 
 /* 1位-2位の差 */
 
-.race-card .gap { white-space: nowrap; }
-.race-card .gap.clear { color: var(--solid); font-weight: 700; }
-.race-card .gap.mid { color: var(--muted); }
-.race-card .gap.close { color: var(--rough); }
+/* 上位3頭の並び方（独走・2強・団子） */
+.race-card .shape {
+  white-space: nowrap;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 4px;
+  cursor: help;
+}
+.race-card .shape.dokusou { color: var(--solid); background: var(--solid-bg); }
+.race-card .shape.nikyo { color: var(--accent); }
+.race-card .shape.dango { color: var(--rough); background: var(--rough-bg); }
 
 /* 2行目: 内訳指数（値と順位）。狭いときは折り返す */
 .race-card .breakdown {

@@ -348,18 +348,43 @@ function computePriorityForRace(group) {
   sorted.forEach((r, i) => { r.priorityRank = i + 1; });
 }
 
-// ---------- 1位と2位のスコア差 ----------
-// 優先指数は順位だけでなく数値の大きさにも情報がある。1位が2位をどれだけ
-// 離しているかで、1位馬の勝率が2022-2026年の15,367レースで以下のように動く。
-//   差0.042未満 20.8% / 0.042〜0.115 26.5% / 0.115以上 32.7%
-const GAP_BANDS = [
-  { min: 0.115, key: 'clear', label: '抜けている', winRate: 32.7 },
-  { min: 0.042, key: 'mid', label: '標準', winRate: 26.5 },
-  { min: -Infinity, key: 'close', label: '横並び', winRate: 20.8 },
-];
+// ---------- 上位3頭の並び方（独走・2強・団子） ----------
+// 1-2位差と2-3位差を組み合わせると、1-2位差だけより分離が良い。
+// 2022-2026年・15,083レースの中央値（1-2位差0.056 / 2-3位差0.043）を境に
+// 4通りに分けたときの優先1位馬の成績:
+//   独走(1-2位差も2-3位差も中央値以上) … 1頭が頭ひとつ抜けている 勝率30.7%/複勝61.4%
+//   2強(1-2位差は中央値未満・2-3位差は以上) … 上位2頭が拮抗し、3位以下から浮いている 勝率23.3%/複勝53.9%
+//   団子(1-2位差も2-3位差も中央値未満) … 3頭以上が拮抗 勝率19.5%/複勝48.9%
+//   その他(1-2位差は中央値以上・2-3位差は未満) … 明確な分類には当てはまらない
+const GAP12_MEDIAN = 0.056;
+const GAP23_MEDIAN = 0.043;
 
-function gapBand(gap) {
-  return GAP_BANDS.find((b) => gap >= b.min);
+const SHAPE_PATTERNS = {
+  dokusou: { label: '独走', winRate: 30.7, place: 61.4,
+             hint: '1位が2位から抜け、その2位も3位以下から抜けている' },
+  nikyo:   { label: '2強', winRate: 23.3, place: 53.9,
+             hint: '1位と2位は僅差だが、2頭とも3位以下から抜けている' },
+  dango:   { label: '団子', winRate: 19.5, place: 48.9,
+             hint: '1位・2位・3位が僅差で並んでいる' },
+  other:   { label: '', winRate: null, place: null, hint: '' },
+};
+
+function shapeChipHtml(r) {
+  if (!r.shape || r.shape === 'other') return '';
+  const p = SHAPE_PATTERNS[r.shape];
+  const gap12 = r.gap12.toFixed(3), gap23 = r.gap23.toFixed(3);
+  return ` / <span class="shape ${r.shape}" `
+    + `title="${p.hint}。この型の優先1位馬は勝率${p.winRate}%・複勝率${p.place}%（1-2位差${gap12} / 2-3位差${gap23}）">`
+    + `${p.label}</span>`;
+}
+
+function raceShape(gap12, gap23) {
+  const wide12 = gap12 >= GAP12_MEDIAN;
+  const wide23 = gap23 >= GAP23_MEDIAN;
+  if (wide12 && wide23) return 'dokusou';
+  if (!wide12 && wide23) return 'nikyo';
+  if (!wide12 && !wide23) return 'dango';
+  return 'other';
 }
 
 // ---------- カードに並べる内訳指数 ----------
@@ -498,9 +523,12 @@ function buildRaceSummaries() {
       // カードには全頭を馬番順で並べる（出馬表やオッズ画面と突き合わせやすい）
       byUma: [...group].sort((a, b) => a.uma - b.uma),
       all: byPriority,
-      gap: byPriority.length >= 2 ? byPriority[0].priority - byPriority[1].priority : null,
-      gapBand: byPriority.length >= 2
-        ? gapBand(byPriority[0].priority - byPriority[1].priority) : null,
+      gap12: byPriority.length >= 2 ? byPriority[0].priority - byPriority[1].priority : null,
+      gap23: byPriority.length >= 3 ? byPriority[1].priority - byPriority[2].priority : null,
+      shape: byPriority.length >= 3
+        ? raceShape(byPriority[0].priority - byPriority[1].priority,
+                    byPriority[1].priority - byPriority[2].priority)
+        : null,
       agree,
       agreeOdds,
       popular: entered || null,
@@ -863,9 +891,7 @@ function renderRaceList() {
         <header>
           <div class="rtitle">
             <strong>${formatDate(r.date)} ${r.place} ${r.race}R</strong>
-            <span class="rmeta">${r.fieldSize}頭 / ${r.basis}指数${
-              r.gapBand ? ` / <span class="gap ${r.gapBand.key}" title="1位と2位のスコア差 ${r.gap.toFixed(3)}。この帯の1位馬の勝率は${r.gapBand.winRate}%">1-2位差 ${r.gap.toFixed(3)}・${r.gapBand.label}</span>` : ''
-            }</span>
+            <span class="rmeta">${r.fieldSize}頭 / ${r.basis}指数${shapeChipHtml(r)}</span>
           </div>
           ${badge}
         </header>
