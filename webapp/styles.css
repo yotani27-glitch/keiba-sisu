@@ -12,6 +12,8 @@
   --rank3-green: #bbf7d0;
   --popular1-border: #b45309;
   --popular2-border: #1d4ed8;
+  --place-priority: #047857;
+  --place-priority-bg: #d1fae5;
   font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
@@ -27,6 +29,8 @@
     --rank3-green: #1f4d2e;
     --popular1-border: #facc15;
     --popular2-border: #60a5fa;
+    --place-priority: #6ee7b7;
+    --place-priority-bg: #064e3b;
   }
 }
 
@@ -338,21 +342,30 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
   align-items: center;
   gap: 8px;
 }
-.race-card .prank {
+.race-card .prank,
+.race-card .fprank {
   flex: 0 0 auto;
-  min-width: 1.6em;
-  height: 1.6em;
+  min-width: 2.3em;
+  height: 1.7em;
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  border-radius: 50%;
+  border-radius: 999px;
   background: var(--border);
   color: var(--text);
+}
+.race-card .fprank {
+  color: var(--place-priority);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--place-priority) 55%, var(--border));
 }
 /* 馬番順に並べるため、優先1位・2位は行の位置ではなくクラスで示す */
 .race-card li.p1 .prank { background: var(--gold); }
 .race-card li.p2 .prank { background: var(--rank2-blue); }
+.race-card li.fp1 .fprank,
+.race-card li.fp2 .fprank { background: var(--place-priority-bg); }
+.race-card li.fp1 .fprank { box-shadow: inset 0 0 0 1px var(--place-priority); }
 .race-card .uma { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .race-card .hname { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .race-card .gyn { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
@@ -435,13 +448,25 @@ button.subtle {
 }
 
 /* 優先スコア（1行目の右寄り）。馬名が長いときは馬名側を省略させる */
-.race-card .pscore {
+.race-card .pscores {
   flex: 0 0 auto;
-  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.race-card .pscore,
+.race-card .fpscore {
+  flex: 0 0 auto;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
+.race-card .pscore i,
+.race-card .fpscore i { margin-right: 2px; font-size: 9px; font-style: normal; }
+.race-card .fpscore { color: var(--place-priority); }
 .race-card li.p1 .pscore { color: var(--text); font-weight: 700; }
+.race-card li.fp1 .fpscore { font-weight: 700; }
 
 /* 1位-2位の差 */
 
@@ -491,6 +516,8 @@ button.subtle {
 .race-card .ix.r3 i, .race-card .ix.r3 b { color: inherit; opacity: .75; }
 .chip-note.legend { flex: 1 0 100%; font-size: 11px; }
 .chip-note.legend b { color: var(--text); font-weight: 700; }
+.chip-note.priority-legend { flex: 1 0 100%; font-size: 11px; }
+.chip-note.priority-legend b:last-of-type { color: var(--place-priority); }
 
 /* 全頭を馬番順に並べるので、優先上位2頭は行ごと目立たせる */
 .race-card ol.horses li.p1,

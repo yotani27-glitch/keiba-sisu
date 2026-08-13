@@ -48,6 +48,19 @@ const PRIORITY_LABEL = '優先指数';
 // Ｆ指数とＳ指数だけは欠かせない（重みの6割強を占めるため）
 const PRIORITY_REQUIRED = ['7tua', '6tua'];
 
+// ---------- 複勝優先指数 ----------
+// 「3着以内」を目的変数にして2022-2026年の15,414レースを再分析した重み。
+// 2025年で学習して2026年で未使用データ検証し、現行式より上位3頭の
+// 3着内馬捕捉率が改善する方向だった。現行指数は置き換えず、比較用に併記する。
+const PLACE_PRIORITY_WEIGHTS = {
+  '7tua': 8,    // Ｆ指数
+  '6tua': 5,    // Ｓ指数
+  '11tua': 3,   // arms指数２
+  '00tua': 3,   // LVL2
+  '厩舎Finish-Up': 3,
+};
+const PLACE_PRIORITY_LABEL = '複勝優先指数';
+
 // レース内で 1位=1.0 / 最下位=0.0 になるよう順位を正規化する
 function normalizedRankScore(rank, fieldSize) {
   if (!rank || fieldSize < 2) return null;
@@ -322,15 +335,29 @@ function finalizeRecords() {
 // （レース内で比較さえできれば順位付けは成立するため）。これにより厩舎Finish-Upや
 // LVL2が無い期間でも、残りの指数だけで計算できる。
 function computePriorityForRace(group) {
+  computeWeightedIndexForRace(group, PRIORITY_WEIGHTS, {
+    score: 'priority', rank: 'priorityRank', basis: 'priorityBasis',
+  });
+  computeWeightedIndexForRace(group, PLACE_PRIORITY_WEIGHTS, {
+    score: 'placePriority', rank: 'placePriorityRank', basis: 'placePriorityBasis',
+  });
+}
+
+// 同じ計算規則で複数の合成指数を作れるようにした共通処理。
+function computeWeightedIndexForRace(group, weights, fields) {
   const fieldSize = group.length;
   const usable = [];
-  for (const [label, weight] of Object.entries(PRIORITY_WEIGHTS)) {
+  for (const [label, weight] of Object.entries(weights)) {
     const allHaveRank = group.every((r) => r.ranks[label] !== undefined);
     if (allHaveRank) usable.push([label, weight]);
   }
   const hasRequired = PRIORITY_REQUIRED.every((l) => usable.some(([lb]) => lb === l));
   if (!hasRequired || fieldSize < 2) {
-    for (const r of group) { delete r.priority; delete r.priorityRank; delete r.priorityBasis; }
+    for (const r of group) {
+      delete r[fields.score];
+      delete r[fields.rank];
+      delete r[fields.basis];
+    }
     return;
   }
 
@@ -340,12 +367,12 @@ function computePriorityForRace(group) {
     for (const [label, weight] of usable) {
       sum += weight * normalizedRankScore(rec.ranks[label], fieldSize);
     }
-    rec.priority = sum / totalWeight;
-    rec.priorityBasis = usable.length;
+    rec[fields.score] = sum / totalWeight;
+    rec[fields.basis] = usable.length;
   }
 
-  const sorted = [...group].sort((a, b) => b.priority - a.priority);
-  sorted.forEach((r, i) => { r.priorityRank = i + 1; });
+  const sorted = [...group].sort((a, b) => b[fields.score] - a[fields.score] || a.uma - b.uma);
+  sorted.forEach((r, i) => { r[fields.rank] = i + 1; });
 }
 
 // ---------- 上位3頭の並び方（独走・2強・団子） ----------
@@ -863,6 +890,7 @@ function renderRaceList() {
     <span class="chip chip-rough">荒れそう ${counts.rough}</span>
     ${noGyn}
     <span class="chip-note">全${races.length}レース</span>
+    <span class="chip-note priority-legend"><b>優</b>=優先指数順位 · <b>複</b>=複勝優先指数順位</span>
     <span class="chip-note legend">内訳: ${
       BREAKDOWN.map(([l, s]) => `<b>${s}</b>=${LABEL_NAMES[l] || l}`).join(' · ')
     }（値と順位）</span>`;
@@ -879,15 +907,20 @@ function renderRaceList() {
       const popularRank = pop.indexOf(h.uma) + 1;
       const classes = [
         h.priorityRank <= 2 ? `p${h.priorityRank}` : '',
+        h.placePriorityRank <= 2 ? `fp${h.placePriorityRank}` : '',
         popularRank > 0 ? `is-popular pop${popularRank}` : '',
       ].filter(Boolean).join(' ');
       return `
       <li class="${classes}">
         <div class="hrow">
-          <span class="prank">${h.priorityRank}</span>
+          <span class="prank" title="${PRIORITY_LABEL} ${h.priorityRank}位">優${h.priorityRank}</span>
+          <span class="fprank" title="${PLACE_PRIORITY_LABEL} ${h.placePriorityRank}位">複${h.placePriorityRank}</span>
           <span class="uma">${h.uma}番</span>
           <span class="hname">${h.name ? escapeHtml(h.name) : ''}</span>
-          <span class="pscore" title="優先スコア">${h.priority.toFixed(3)}</span>
+          <span class="pscores">
+            <span class="pscore" title="優先スコア"><i>優</i>${h.priority.toFixed(3)}</span>
+            <span class="fpscore" title="複勝優先スコア"><i>複</i>${h.placePriority.toFixed(3)}</span>
+          </span>
           ${h.scores['GYN'] !== undefined ? `<span class="gyn">予想${h.scores['GYN']}人気</span>` : ''}
         </div>
         ${breakdownHtml(h)}
