@@ -375,7 +375,7 @@ function shapeChipHtml(r) {
   const gap12 = r.gap12.toFixed(3), gap23 = r.gap23.toFixed(3);
   return ` / <span class="shape ${r.shape}" `
     + `title="${p.hint}。この型の優先1位馬は勝率${p.winRate}%・複勝率${p.place}%（1-2位差${gap12} / 2-3位差${gap23}）">`
-    + `${p.label}</span>`;
+    + `${p.label}<small>勝${p.winRate.toFixed(1)}% / 複${p.place.toFixed(1)}%</small></span>`;
 }
 
 function raceShape(gap12, gap23) {
@@ -871,7 +871,7 @@ function renderRaceList() {
     const f = r.firmness;
     const src = r.byOdds ? '当日人気' : '予想人気';
     const badge = f
-      ? `<span class="firmness ${f.key}">${f.label}<em>${src}基準 · 優先1位の勝率 ${f.winRate.toFixed(1)}%</em></span>`
+      ? `<span class="firmness ${f.key}" title="この条件の優先1位馬は勝率${f.winRate.toFixed(1)}%・複勝率${f.place.toFixed(1)}%">${f.label}<em>${src} · 勝${f.winRate.toFixed(1)}% / 複${f.place.toFixed(1)}%</em></span>`
       : `<span class="firmness unknown">判定不可<em>予想人気(GYN)なし</em></span>`;
     const pop = r.popular || [];
     // 馬番順に並べるので、優先順位はクラスで示す（先頭行＝1位ではなくなる）
