@@ -447,12 +447,16 @@ button.subtle {
 
 /* 上位3頭の並び方（独走・2強・団子） */
 .race-card .shape {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
   white-space: nowrap;
   font-weight: 700;
   padding: 0 4px;
   border-radius: 4px;
   cursor: help;
 }
+.race-card .shape small { font-size: 10px; font-weight: 500; opacity: .85; }
 .race-card .shape.dokusou { color: var(--solid); background: var(--solid-bg); }
 .race-card .shape.nikyo { color: var(--accent); }
 .race-card .shape.dango { color: var(--rough); background: var(--rough-bg); }
