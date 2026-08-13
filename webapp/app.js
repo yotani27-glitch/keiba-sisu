@@ -983,11 +983,16 @@ function escapeHtml(s) {
 
 // X投稿用本文。全馬を収めやすいよう、項目名は見出しにまとめ、優先値は小数2桁にする。
 function racePostText(race) {
+  const marks = ['◎', '〇', '▲'];
+  const selections = race.all.slice(0, 3).map((h, i) => {
+    const name = h.name ? String(h.name).trim() : '馬名なし';
+    return `${marks[i]} ${h.uma}番 ${name}`;
+  });
   const rows = race.byUma.map((h) => {
     const name = h.name ? String(h.name).trim() : '馬名なし';
     return `${h.uma} ${name} ${h.priority.toFixed(2)}`;
   });
-  return `${race.place} ${race.race}R\n馬番 馬名 優先値\n${rows.join('\n')}`;
+  return `${race.place} ${race.race}R\n${selections.join('\n')}\n\n全馬指数\n馬番 馬名 優先値\n${rows.join('\n')}`;
 }
 
 function openRacePost(raceKey) {
