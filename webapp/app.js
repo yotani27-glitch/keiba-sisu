@@ -414,6 +414,29 @@ function raceShape(gap12, gap23) {
   return 'other';
 }
 
+// ---------- 優先値の強さ目印 ----------
+// 2022-2026年・芝ダート15,367レースの指数1位馬を、各値以上で累積集計。
+// 2位以下に同じ率は適用できないため、目印はそれぞれの指数1位馬だけに付ける。
+const SCORE_STRENGTH = {
+  priority: [
+    { min: 0.94, label: '最上位', cls: 'top', win: 33.9, place: 63.7 },
+    { min: 0.92, label: '強', cls: 'strong', win: 31.5, place: 62.7 },
+    { min: 0.90, label: '有力', cls: 'likely', win: 29.4, place: 60.6 },
+  ],
+  placePriority: [
+    { min: 0.94, label: '最上位', cls: 'top', win: 33.2, place: 63.7 },
+    { min: 0.92, label: '強', cls: 'strong', win: 31.0, place: 62.3 },
+    { min: 0.90, label: '有力', cls: 'likely', win: 29.7, place: 60.5 },
+  ],
+};
+
+function scoreStrengthHtml(score, rank, type) {
+  if (rank !== 1) return '';
+  const band = SCORE_STRENGTH[type].find((b) => score >= b.min);
+  if (!band) return '';
+  return `<b class="score-strength ${band.cls}" title="${band.min.toFixed(2)}以上の指数1位馬：勝率${band.win.toFixed(1)}%・複勝率${band.place.toFixed(1)}%">${band.label}</b>`;
+}
+
 // ---------- カードに並べる内訳指数 ----------
 // 表示順。ラベルは短くしないと横に収まらない
 const BREAKDOWN = [
@@ -918,8 +941,8 @@ function renderRaceList() {
           <span class="uma">${h.uma}番</span>
           <span class="hname">${h.name ? escapeHtml(h.name) : ''}</span>
           <span class="pscores">
-            <span class="pscore" title="優先スコア"><i>優</i>${h.priority.toFixed(3)}</span>
-            <span class="fpscore" title="複勝優先スコア"><i>複</i>${h.placePriority.toFixed(3)}</span>
+            <span class="pscore" title="優先スコア"><i>優</i>${h.priority.toFixed(3)}${scoreStrengthHtml(h.priority, h.priorityRank, 'priority')}</span>
+            <span class="fpscore" title="複勝優先スコア"><i>複</i>${h.placePriority.toFixed(3)}${scoreStrengthHtml(h.placePriority, h.placePriorityRank, 'placePriority')}</span>
             ${h.scores['GYN'] !== undefined ? `<span class="gyn" title="予想人気"><i>予</i>${h.scores['GYN']}人気</span>` : ''}
           </span>
         </div>

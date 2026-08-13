@@ -465,6 +465,7 @@ button.subtle {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
+  white-space: nowrap;
 }
 .race-card .pscore i,
 .race-card .fpscore i,
@@ -472,6 +473,19 @@ button.subtle {
 .race-card .fpscore { color: var(--place-priority); }
 .race-card li.p1 .pscore { color: var(--text); font-weight: 700; }
 .race-card li.fp1 .fpscore { font-weight: 700; }
+.race-card .score-strength {
+  display: inline-block;
+  margin-left: 3px;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-size: 9px;
+  line-height: 1.35;
+  color: #fff;
+  vertical-align: 1px;
+}
+.race-card .score-strength.likely { background: #2563eb; }
+.race-card .score-strength.strong { background: #c2410c; }
+.race-card .score-strength.top { background: #b91c1c; }
 
 /* 1位-2位の差 */
 
