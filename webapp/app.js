@@ -32,6 +32,28 @@ const ASCENDING_LABELS = new Set([]);
 // 値自体がすでに順位（予想人気順など）のため、別途の順位計算・順位列表示が不要なラベル
 const NO_RANK_LABELS = new Set(['GYN']);
 
+// ---------- 優先指数 ----------
+// 2022-2026年の15,414レース・211,848頭を条件付きロジットで学習して決めた重み。
+// 効かないと確認できた指数（坂路血統・持ち時計血統・コース連動・血統連動・
+// バランス・坂路調教）は、5年間ずっと1位馬の勝率がランダム基準7.3%と
+// 区別できなかったため入れていない。混ぜるとむしろ精度が落ちる。
+const PRIORITY_WEIGHTS = {
+  '7tua': 4,    // Ｆ指数 — 能力の本線。単独1位馬の勝率24.1%
+  '6tua': 3,    // Ｓ指数 — 先行力の代理。3位内の49.5%が最終角3番手以内
+  '11tua': 2,   // arms指数２
+  '00tua': 2,   // LVL2
+  '厩舎Finish-Up': 2,
+};
+const PRIORITY_LABEL = '優先指数';
+// Ｆ指数とＳ指数だけは欠かせない（重みの6割強を占めるため）
+const PRIORITY_REQUIRED = ['7tua', '6tua'];
+
+// レース内で 1位=1.0 / 最下位=0.0 になるよう順位を正規化する
+function normalizedRankScore(rank, fieldSize) {
+  if (!rank || fieldSize < 2) return null;
+  return 1 - (rank - 1) / (fieldSize - 1);
+}
+
 function labelDisplayName(label) {
   return LABEL_NAMES[label] || label;
 }
@@ -46,6 +68,9 @@ const state = {
   mode: 'both',
   search: '',
   sort: null, // { key, dir }
+  races: [],  // レース単位のサマリ（優先指数・堅さ判定）
+  raceFilters: { date: '', place: '', firmness: '' },
+  view: 'races',
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -69,6 +94,16 @@ const els = {
   table: $('#dataTable'),
   tableEmpty: $('#tableEmpty'),
   toast: $('#toast'),
+  tabRaces: $('#tabRaces'),
+  tabTable: $('#tabTable'),
+  raceView: $('#raceView'),
+  tableView: $('#tableView'),
+  raceDateSelect: $('#raceDateSelect'),
+  racePlaceSelect: $('#racePlaceSelect'),
+  firmnessSelect: $('#firmnessSelect'),
+  raceSummary: $('#raceSummary'),
+  raceList: $('#raceList'),
+  raceEmpty: $('#raceEmpty'),
 };
 
 function notify(message) {
@@ -265,7 +300,97 @@ function finalizeRecords() {
         r.ranks[label] = rank;
       }
     }
+    computePriorityForRace(group);
   }
+}
+
+// レース1つ分の優先指数を計算する。
+// そのレースの全馬に順位が揃っている指数だけを使い、重みをその分だけ再正規化する
+// （レース内で比較さえできれば順位付けは成立するため）。これにより厩舎Finish-Upや
+// LVL2が無い期間でも、残りの指数だけで計算できる。
+function computePriorityForRace(group) {
+  const fieldSize = group.length;
+  const usable = [];
+  for (const [label, weight] of Object.entries(PRIORITY_WEIGHTS)) {
+    const allHaveRank = group.every((r) => r.ranks[label] !== undefined);
+    if (allHaveRank) usable.push([label, weight]);
+  }
+  const hasRequired = PRIORITY_REQUIRED.every((l) => usable.some(([lb]) => lb === l));
+  if (!hasRequired || fieldSize < 2) {
+    for (const r of group) { delete r.priority; delete r.priorityRank; delete r.priorityBasis; }
+    return;
+  }
+
+  const totalWeight = usable.reduce((s, [, w]) => s + w, 0);
+  for (const rec of group) {
+    let sum = 0;
+    for (const [label, weight] of usable) {
+      sum += weight * normalizedRankScore(rec.ranks[label], fieldSize);
+    }
+    rec.priority = sum / totalWeight;
+    rec.priorityBasis = usable.length;
+  }
+
+  const sorted = [...group].sort((a, b) => b.priority - a.priority);
+  sorted.forEach((r, i) => { r.priorityRank = i + 1; });
+}
+
+// ---------- 堅さ判定 ----------
+// 優先指数の上位2頭と、予想人気(GYN)の上位2頭が何頭重なるかで3段階に分ける。
+// 2026年1,973レースでの実測（優先1位馬の勝率）:
+//   一致2頭 30.1% / 一致1頭 24.6% / 一致0頭 17.1%
+// 確定オッズを使えば分離はもっと鋭くなる（33.7% / 23.5% / 11.1%）が、
+// GYNはレース前に分かるという利点がある。
+const FIRMNESS = {
+  2: { key: 'solid', label: '堅そう', winRate: 30.1, place: 66.0 },
+  1: { key: 'normal', label: '標準', winRate: 24.6, place: 54.6 },
+  0: { key: 'rough', label: '荒れそう', winRate: 17.1, place: 45.2 },
+};
+
+// 読み込み済みレコードから、レース単位のサマリを作る
+function buildRaceSummaries() {
+  const groups = new Map();
+  for (const rec of state.records.values()) {
+    if (rec.priorityRank === undefined) continue;
+    const gKey = `${rec.date}|${rec.placeCode}|${rec.race}`;
+    if (!groups.has(gKey)) groups.set(gKey, []);
+    groups.get(gKey).push(rec);
+  }
+
+  const races = [];
+  for (const [gKey, group] of groups) {
+    const [date, placeCode, race] = gKey.split('|');
+    const byPriority = [...group].sort((a, b) => a.priorityRank - b.priorityRank);
+    const hasGyn = group.every((r) => r.scores['GYN'] !== undefined);
+
+    let agree = null;
+    if (hasGyn) {
+      const topPriority = new Set(byPriority.slice(0, 2).map((r) => r.uma));
+      const topGyn = [...group]
+        .sort((a, b) => a.scores['GYN'] - b.scores['GYN'])
+        .slice(0, 2)
+        .map((r) => r.uma);
+      agree = topGyn.filter((u) => topPriority.has(u)).length;
+    }
+
+    races.push({
+      key: gKey,
+      date,
+      placeCode,
+      place: PLACE_NAMES[placeCode] || placeCode,
+      race: Number(race),
+      fieldSize: group.length,
+      top: byPriority.slice(0, 5),
+      agree,
+      firmness: agree === null ? null : FIRMNESS[agree],
+      basis: byPriority[0].priorityBasis,
+    });
+  }
+
+  races.sort((a, b) => a.date.localeCompare(b.date)
+    || a.placeCode.localeCompare(b.placeCode)
+    || a.race - b.race);
+  return races;
 }
 
 // ---------- フォルダ走査 ----------
@@ -378,7 +503,93 @@ function afterLoad({ fileCount }) {
   populateFilterOptions();
   renderColumnMenu();
   renderTable();
+  state.races = buildRaceSummaries();
+  populateRaceFilters();
+  renderRaceList();
   notify(`${fileCount}件のファイルを読み込みました`);
+}
+
+// ---------- レース一覧（優先指数・堅さ判定） ----------
+function populateRaceFilters() {
+  const races = state.races || [];
+  const dates = [...new Set(races.map((r) => r.date))].sort();
+  els.raceDateSelect.innerHTML = '<option value="">すべての日付</option>'
+    + dates.map((d) => `<option value="${d}">${formatDate(d)}</option>`).join('');
+  if (dates.length) {
+    // 既定は最新の日付だけ表示する（週次運用で使うため）
+    els.raceDateSelect.value = dates[dates.length - 1];
+    state.raceFilters.date = dates[dates.length - 1];
+  }
+  updateRacePlaceOptions();
+}
+
+function updateRacePlaceOptions() {
+  const races = (state.races || []).filter((r) =>
+    !state.raceFilters.date || r.date === state.raceFilters.date);
+  const places = [...new Set(races.map((r) => r.place))];
+  els.racePlaceSelect.innerHTML = '<option value="">すべての場所</option>'
+    + places.map((p) => `<option value="${p}">${p}</option>`).join('');
+  els.racePlaceSelect.value = places.includes(state.raceFilters.place)
+    ? state.raceFilters.place : '';
+  state.raceFilters.place = els.racePlaceSelect.value;
+}
+
+function getFilteredRaces() {
+  const f = state.raceFilters;
+  return (state.races || []).filter((r) => {
+    if (f.date && r.date !== f.date) return false;
+    if (f.place && r.place !== f.place) return false;
+    if (f.firmness && (!r.firmness || r.firmness.key !== f.firmness)) return false;
+    return true;
+  });
+}
+
+function renderRaceList() {
+  const races = getFilteredRaces();
+  els.raceEmpty.hidden = races.length > 0;
+
+  const counts = { solid: 0, normal: 0, rough: 0, unknown: 0 };
+  for (const r of races) {
+    if (r.firmness) counts[r.firmness.key]++; else counts.unknown++;
+  }
+  const noGyn = counts.unknown > 0
+    ? `<span class="chip chip-unknown">判定不可 ${counts.unknown}</span>` : '';
+  els.raceSummary.innerHTML = races.length === 0 ? '' : `
+    <span class="chip chip-solid">堅そう ${counts.solid}</span>
+    <span class="chip chip-normal">標準 ${counts.normal}</span>
+    <span class="chip chip-rough">荒れそう ${counts.rough}</span>
+    ${noGyn}
+    <span class="chip-note">全${races.length}レース</span>`;
+
+  els.raceList.innerHTML = races.map((r) => {
+    const f = r.firmness;
+    const badge = f
+      ? `<span class="firmness ${f.key}">${f.label}<em>優先1位の勝率 ${f.winRate}%</em></span>`
+      : `<span class="firmness unknown">判定不可<em>予想人気(GYN)なし</em></span>`;
+    const horses = r.top.map((h) => `
+      <li>
+        <span class="prank">${h.priorityRank}</span>
+        <span class="uma">${h.uma}番</span>
+        <span class="hname">${h.name ? escapeHtml(h.name) : ''}</span>
+        ${h.scores['GYN'] !== undefined ? `<span class="gyn">予想${h.scores['GYN']}人気</span>` : ''}
+      </li>`).join('');
+    return `
+      <article class="race-card ${f ? f.key : 'unknown'}">
+        <header>
+          <div class="rtitle">
+            <strong>${formatDate(r.date)} ${r.place} ${r.race}R</strong>
+            <span class="rmeta">${r.fieldSize}頭 / ${r.basis}指数</span>
+          </div>
+          ${badge}
+        </header>
+        <ol class="horses">${horses}</ol>
+      </article>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // ---------- フィルタUI ----------
@@ -619,6 +830,33 @@ function exportYearCsv() {
 
 // ---------- イベント ----------
 els.loadButton.addEventListener('click', handleLoadClick);
+
+function switchView(view) {
+  state.view = view;
+  const isRaces = view === 'races';
+  els.raceView.hidden = !isRaces;
+  els.tableView.hidden = isRaces;
+  els.tabRaces.classList.toggle('active', isRaces);
+  els.tabTable.classList.toggle('active', !isRaces);
+  els.tabRaces.setAttribute('aria-selected', String(isRaces));
+  els.tabTable.setAttribute('aria-selected', String(!isRaces));
+}
+els.tabRaces.addEventListener('click', () => switchView('races'));
+els.tabTable.addEventListener('click', () => switchView('table'));
+
+els.raceDateSelect.addEventListener('change', () => {
+  state.raceFilters.date = els.raceDateSelect.value;
+  updateRacePlaceOptions();
+  renderRaceList();
+});
+els.racePlaceSelect.addEventListener('change', () => {
+  state.raceFilters.place = els.racePlaceSelect.value;
+  renderRaceList();
+});
+els.firmnessSelect.addEventListener('change', () => {
+  state.raceFilters.firmness = els.firmnessSelect.value;
+  renderRaceList();
+});
 
 els.dateSelect.addEventListener('change', () => {
   state.filters.date = els.dateSelect.value;

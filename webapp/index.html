@@ -25,6 +25,38 @@
   </section>
 
   <section id="dashboard" hidden>
+    <div class="tabs" role="tablist">
+      <button id="tabRaces" class="tab active" role="tab" aria-selected="true">レース一覧</button>
+      <button id="tabTable" class="tab" role="tab" aria-selected="false">指数テーブル</button>
+    </div>
+
+    <div id="raceView">
+      <div class="toolbar">
+        <div class="field">
+          <label for="raceDateSelect">日付</label>
+          <select id="raceDateSelect"></select>
+        </div>
+        <div class="field">
+          <label for="racePlaceSelect">場所</label>
+          <select id="racePlaceSelect"></select>
+        </div>
+        <div class="field">
+          <label for="firmnessSelect">堅さ</label>
+          <select id="firmnessSelect">
+            <option value="">すべて</option>
+            <option value="solid">堅そう</option>
+            <option value="normal">標準</option>
+            <option value="rough">荒れそう</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="raceSummary" class="race-summary"></div>
+      <div id="raceList" class="race-list"></div>
+      <div id="raceEmpty" class="empty-state" hidden>該当するレースがありません。</div>
+    </div>
+
+    <div id="tableView" hidden>
     <div class="toolbar">
       <div class="field">
         <label for="dateSelect">日付</label>
@@ -74,6 +106,7 @@
       <table id="dataTable"></table>
     </div>
     <div id="tableEmpty" class="empty-state" hidden>該当するデータがありません。</div>
+    </div>
   </section>
 
   <div id="toast" class="toast"></div>

@@ -217,3 +217,139 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
   transition: opacity 0.2s, transform 0.2s;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- レース一覧（優先指数・堅さ判定） ---------- */
+:root {
+  --solid: #15803d;
+  --solid-bg: #dcfce7;
+  --normal: #a16207;
+  --normal-bg: #fef9c3;
+  --rough: #b91c1c;
+  --rough-bg: #fee2e2;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --solid: #86efac;
+    --solid-bg: #14432a;
+    --normal: #fde68a;
+    --normal-bg: #453a12;
+    --rough: #fca5a5;
+    --rough-bg: #4c1d1d;
+  }
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.race-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 0 16px 12px;
+}
+.chip {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.chip-solid { color: var(--solid); background: var(--solid-bg); }
+.chip-normal { color: var(--normal); background: var(--normal-bg); }
+.chip-rough { color: var(--rough); background: var(--rough-bg); }
+.chip-unknown { color: var(--muted); background: var(--border); }
+.chip-note { font-size: 12px; color: var(--muted); }
+
+.race-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 0 16px 24px;
+}
+
+.race-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.race-card.solid { border-left-color: var(--solid); }
+.race-card.normal { border-left-color: var(--normal); }
+.race-card.rough { border-left-color: var(--rough); }
+
+.race-card > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.race-card .rtitle { display: flex; flex-direction: column; gap: 2px; }
+.race-card .rmeta { font-size: 11px; color: var(--muted); }
+
+.firmness {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+.firmness em { font-style: normal; font-weight: 400; font-size: 10px; opacity: .85; }
+.firmness.solid { color: var(--solid); background: var(--solid-bg); }
+.firmness.normal { color: var(--normal); background: var(--normal-bg); }
+.firmness.rough { color: var(--rough); background: var(--rough-bg); }
+.firmness.unknown { color: var(--muted); background: var(--border); }
+
+.race-card ol.horses { list-style: none; margin: 0; padding: 6px 8px 10px; }
+.race-card ol.horses li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  font-size: 14px;
+}
+.race-card .prank {
+  flex: 0 0 auto;
+  min-width: 1.6em;
+  height: 1.6em;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text);
+}
+.race-card li:first-child .prank { background: var(--gold); }
+.race-card .uma { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.race-card .hname { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-card .gyn { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+
+@media (max-width: 600px) {
+  .toolbar { padding: 12px; }
+  .race-list { grid-template-columns: 1fr; padding: 0 12px 24px; }
+  .tabs { padding: 0 12px; }
+  .race-summary { padding: 0 12px 12px; }
+}
