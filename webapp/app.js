@@ -434,7 +434,8 @@ function scoreStrengthHtml(score, rank, type) {
   if (rank !== 1) return '';
   const band = SCORE_STRENGTH[type].find((b) => score >= b.min);
   if (!band) return '';
-  return `<b class="score-strength ${band.cls}" title="${band.min.toFixed(2)}以上の指数1位馬：勝率${band.win.toFixed(1)}%・複勝率${band.place.toFixed(1)}%">${band.label}</b>`;
+  const tip = `${band.min.toFixed(2)}以上の指数1位馬：勝率${band.win.toFixed(1)}%・複勝率${band.place.toFixed(1)}%`;
+  return `<button type="button" class="score-strength ${band.cls}" title="${tip}" data-tip="${tip}" aria-label="${band.label}。${tip}" aria-expanded="false">${band.label}</button>`;
 }
 
 // ---------- カードに並べる内訳指数 ----------
@@ -1332,6 +1333,19 @@ els.raceList.addEventListener('change', (ev) => {
 });
 
 els.raceList.addEventListener('click', (ev) => {
+  const strength = ev.target.closest('.score-strength');
+  if (strength) {
+    const willOpen = !strength.classList.contains('show-tip');
+    els.raceList.querySelectorAll('.score-strength.show-tip').forEach((el) => {
+      el.classList.remove('show-tip');
+      el.setAttribute('aria-expanded', 'false');
+    });
+    if (willOpen) {
+      strength.classList.add('show-tip');
+      strength.setAttribute('aria-expanded', 'true');
+    }
+    return;
+  }
   if (!ev.target.classList.contains('clear-pop')) return;
   state.popular.delete(ev.target.closest('.popular-input').dataset.race);
   savePopular();
@@ -1368,6 +1382,12 @@ els.columnButton.addEventListener('click', () => {
   els.columnMenu.hidden = !els.columnMenu.hidden;
 });
 document.addEventListener('click', (e) => {
+  if (!e.target.closest('.score-strength')) {
+    document.querySelectorAll('.score-strength.show-tip').forEach((el) => {
+      el.classList.remove('show-tip');
+      el.setAttribute('aria-expanded', 'false');
+    });
+  }
   if (!els.columnMenu.hidden && !els.columnMenu.contains(e.target) && e.target !== els.columnButton) {
     els.columnMenu.hidden = true;
   }
