@@ -365,10 +365,10 @@ function gapBand(gap) {
 // ---------- カードに並べる内訳指数 ----------
 // 表示順。ラベルは短くしないと横に収まらない
 const BREAKDOWN = [
-  ['7tua', 'F'],
-  ['6tua', 'S'],
-  ['11tua', 'ar'],
   ['厩舎Finish-Up', '厩'],
+  ['6tua', 'S'],
+  ['7tua', 'F'],
+  ['11tua', 'ar'],
 ];
 
 const BREAKDOWN_TITLES = Object.fromEntries(
