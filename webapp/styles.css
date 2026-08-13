@@ -367,7 +367,7 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
 .race-card li.fp2 .fprank { background: var(--place-priority-bg); }
 .race-card li.fp1 .fprank { box-shadow: inset 0 0 0 1px var(--place-priority); }
 .race-card .uma { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
-.race-card .hname { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-card .hname { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .race-card .gyn { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
 
 @media (max-width: 600px) {
@@ -375,6 +375,10 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
   .race-list { grid-template-columns: 1fr; padding: 0 12px 24px; }
   .tabs { padding: 0 12px; }
   .race-summary { padding: 0 12px 12px; }
+  .race-card ol.horses .hrow { gap: 5px; }
+  .race-card .prank,
+  .race-card .fprank { min-width: 2.15em; }
+  .race-card .pscores { min-width: 4.8em; }
 }
 
 /* 当日の人気入力（確定オッズ基準の判定に切り替わる） */
@@ -463,7 +467,8 @@ button.subtle {
   color: var(--muted);
 }
 .race-card .pscore i,
-.race-card .fpscore i { margin-right: 2px; font-size: 9px; font-style: normal; }
+.race-card .fpscore i,
+.race-card .gyn i { margin-right: 2px; font-size: 9px; font-style: normal; }
 .race-card .fpscore { color: var(--place-priority); }
 .race-card li.p1 .pscore { color: var(--text); font-weight: 700; }
 .race-card li.fp1 .fpscore { font-weight: 700; }

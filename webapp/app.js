@@ -920,8 +920,8 @@ function renderRaceList() {
           <span class="pscores">
             <span class="pscore" title="優先スコア"><i>優</i>${h.priority.toFixed(3)}</span>
             <span class="fpscore" title="複勝優先スコア"><i>複</i>${h.placePriority.toFixed(3)}</span>
+            ${h.scores['GYN'] !== undefined ? `<span class="gyn" title="予想人気"><i>予</i>${h.scores['GYN']}人気</span>` : ''}
           </span>
-          ${h.scores['GYN'] !== undefined ? `<span class="gyn">予想${h.scores['GYN']}人気</span>` : ''}
         </div>
         ${breakdownHtml(h)}
       </li>`;
