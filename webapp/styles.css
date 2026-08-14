@@ -505,6 +505,17 @@ button.subtle {
 .race-card .score-strength.likely { background: #2563eb; }
 .race-card .score-strength.strong { background: #c2410c; }
 .race-card .score-strength.top { background: #b91c1c; }
+.race-card .score-caution {
+  border: 1px solid color-mix(in srgb, currentColor 42%, transparent);
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  opacity: .82;
+}
+.race-card .score-caution.discount { color: #78716c; }
+.race-card .score-caution.light { color: #92400e; }
+.race-card .score-caution.light-strong { color: #9a3412; border-style: dashed; }
+.race-card .score-caution.discard { color: #991b1b; border-color: color-mix(in srgb, #991b1b 55%, transparent); }
 .race-card .score-strength.show-tip::after {
   content: attr(data-tip);
   position: absolute;

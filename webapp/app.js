@@ -474,6 +474,30 @@ function scoreStrengthHtml(score, rank, type) {
   return `<button type="button" class="score-strength ${band.cls}" title="${tip}" data-tip="${tip}" aria-label="${band.label}。${tip}" aria-expanded="false">${band.label}</button>`;
 }
 
+// 全出走馬を指数値だけで集計した低指数帯の目印。
+// 複数条件に該当するときは、最も厳しい1段階だけを表示する。
+const SCORE_CAUTION = {
+  priority: [
+    { max: 0.30, label: '消し候補', cls: 'discard', win: 0.9, place: 4.5 },
+    { max: 0.40, label: '軽視', cls: 'light-strong', win: 1.3, place: 6.2 },
+    { max: 0.50, label: '軽視', cls: 'light', win: 1.7, place: 8.0 },
+    { max: 0.60, label: '割引', cls: 'discount', win: 2.5, place: 10.3 },
+  ],
+  placePriority: [
+    { max: 0.30, label: '消し候補', cls: 'discard', win: 1.0, place: 4.7 },
+    { max: 0.40, label: '軽視', cls: 'light-strong', win: 1.3, place: 6.3 },
+    { max: 0.50, label: '軽視', cls: 'light', win: 1.8, place: 8.1 },
+    { max: 0.60, label: '割引', cls: 'discount', win: 2.5, place: 10.3 },
+  ],
+};
+
+function scoreCautionHtml(score, type) {
+  const band = SCORE_CAUTION[type].find((b) => score < b.max);
+  if (!band) return '';
+  const tip = `${band.max.toFixed(2)}未満の全出走馬：勝率${band.win.toFixed(1)}%・複勝率${band.place.toFixed(1)}%`;
+  return `<button type="button" class="score-strength score-caution ${band.cls}" title="${tip}" data-tip="${tip}" aria-label="${band.label}。${tip}" aria-expanded="false">${band.label}</button>`;
+}
+
 // ---------- カードに並べる内訳指数 ----------
 // 表示順。ラベルは短くしないと横に収まらない
 const BREAKDOWN = [
@@ -978,8 +1002,8 @@ function renderRaceList() {
           <span class="uma">${h.uma}番</span>
           <span class="hname">${h.name ? escapeHtml(h.name) : ''}</span>
           <span class="pscores">
-            <span class="pscore" title="優先スコア">${scoreStrengthHtml(h.priority, h.priorityRank, 'priority')}<i>優</i>${h.priority.toFixed(3)}</span>
-            <span class="fpscore" title="複勝優先スコア">${scoreStrengthHtml(h.placePriority, h.placePriorityRank, 'placePriority')}<i>複</i>${h.placePriority.toFixed(3)}</span>
+            <span class="pscore" title="優先スコア">${scoreStrengthHtml(h.priority, h.priorityRank, 'priority')}${scoreCautionHtml(h.priority, 'priority')}<i>優</i>${h.priority.toFixed(3)}</span>
+            <span class="fpscore" title="複勝優先スコア">${scoreStrengthHtml(h.placePriority, h.placePriorityRank, 'placePriority')}${scoreCautionHtml(h.placePriority, 'placePriority')}<i>複</i>${h.placePriority.toFixed(3)}</span>
             ${h.scores['GYN'] !== undefined ? `<span class="gyn" title="予想人気"><i>予</i>${h.scores['GYN']}人気</span>` : ''}
           </span>
         </div>
