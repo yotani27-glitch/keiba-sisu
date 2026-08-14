@@ -249,6 +249,13 @@ const FILE_NAME_RE = /^([A-Za-z0-9]*)(\d{8})\.csv$/i;
 // 馬名対応ファイル(例: name20260808.csv)のラベル名。中身は "18桁ID,馬名" で、指数と違い数値ではなく文字列。
 const NAME_LABEL = 'name';
 
+// TARGETの出馬表CSVで使われる場名1文字。新しい馬名ファイル形式
+// 「札1,未勝利,...,1,...,馬名,...」を指数データの場コードへ結合するために使う。
+const PLACE_SHORT_CODES = {
+  '札': '01', '函': '02', '福': '03', '新': '04', '東': '05',
+  '中': '06', '名': '07', '京': '08', '阪': '09', '小': '10',
+};
+
 function decodeKey(id18) {
   return {
     date: id18.slice(0, 8),
@@ -272,6 +279,7 @@ function processCsvEntry(filename, text, folderLabel) {
   const label = m[1] || folderLabel;
   if (!label) { skippedUnlabeled++; return 0; }
   const isNameFile = label.toLowerCase() === NAME_LABEL;
+  const fileDate = m[2];
   let count = 0;
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -279,6 +287,30 @@ function processCsvEntry(filename, text, folderLabel) {
     const parts = line.includes('\t') ? line.split('\t') : line.split(',');
     if (parts.length < 2) continue;
     const id = parts[0].trim();
+
+    // 新形式: 場名1文字+R、馬番は6列目、馬名は10列目。
+    // 例: 札1,未勝利,ダ,1700,,1,,,,ジャストグレース,...
+    if (isNameFile && !/^\d{18}$/.test(id)) {
+      if (parts.length < 10) continue;
+      const raceMatch = id.match(/^(.)(\d{1,2})$/);
+      if (!raceMatch) continue;
+      const placeCode = PLACE_SHORT_CODES[raceMatch[1]];
+      const race = Number(raceMatch[2]);
+      const uma = Number(parts[5].trim());
+      const name = parts[9].trim();
+      if (!placeCode || !race || !uma || !name) continue;
+      const key = `${fileDate}|${placeCode}|${race}|${uma}`;
+      let rec = state.records.get(key);
+      if (!rec) {
+        rec = { date: fileDate, placeCode, kai: '', day: '', race, uma, scores: {}, ranks: {} };
+        state.records.set(key, rec);
+      }
+      rec.name = name;
+      count++;
+      continue;
+    }
+
+    // 従来形式: 18桁ID,馬名
     if (id.length !== 18 || !/^\d{18}$/.test(id)) continue;
 
     const { date, placeCode, kai, day, race, uma } = decodeKey(id);
@@ -287,6 +319,10 @@ function processCsvEntry(filename, text, folderLabel) {
     if (!rec) {
       rec = { date, placeCode, kai, day, race, uma, scores: {}, ranks: {} };
       state.records.set(key, rec);
+    } else {
+      // 新形式の馬名ファイルが指数ZIPより先に読まれた場合に開催情報を補完する。
+      if (!rec.kai) rec.kai = kai;
+      if (!rec.day) rec.day = day;
     }
 
     if (isNameFile) {

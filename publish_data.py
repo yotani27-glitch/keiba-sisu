@@ -15,6 +15,8 @@ iPhone側はURLを開くだけで最新データが表示される（ファイ�
    優先指数の計算と表示に使うラベルだけに絞ってある。
 """
 import gzip
+import csv
+import io
 import json
 import re
 import sys
@@ -33,6 +35,21 @@ KEEP = {
     "厩舎Finish-Up",
     "GYN",            # 予想人気順（堅さ判定に使う）
 }
+
+PLACE_SHORT_CODES = {
+    "札": "01", "函": "02", "福": "03", "新": "04", "東": "05",
+    "中": "06", "名": "07", "京": "08", "阪": "09", "小": "10",
+}
+
+
+def read_text_auto(path: Path) -> str:
+    data = path.read_bytes()
+    for encoding in ("utf-8-sig", "cp932"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
 
 
 def split_line(line: str) -> list[str]:
@@ -54,6 +71,40 @@ def read_pairs(text: str) -> list[tuple[str, str]]:
     return out
 
 
+def add_names(recs: dict[str, dict], text: str, date8: str) -> int:
+    """18桁ID形式とTARGET出馬表形式のどちらからも馬名を結合する。"""
+    pairs = read_pairs(text)
+    if pairs:
+        for key, val in pairs:
+            recs.setdefault(key, {})["name"] = val
+        return len(pairs)
+
+    # 新形式は開催回・開催日を持たないため、指数ZIPから作った場・R・馬番の対応表で結合する。
+    key_by_race = {
+        (key[8:10], int(key[14:16]), int(key[16:18])): key
+        for key in recs if len(key) == 18 and key.startswith(date8)
+    }
+    count = 0
+    for row in csv.reader(io.StringIO(text)):
+        if len(row) < 10:
+            continue
+        match = re.fullmatch(r"(.)(\d{1,2})", row[0].strip())
+        if not match:
+            continue
+        place_code = PLACE_SHORT_CODES.get(match.group(1))
+        try:
+            race = int(match.group(2))
+            uma = int(row[5].strip())
+        except ValueError:
+            continue
+        name = row[9].strip()
+        key = key_by_race.get((place_code, race, uma))
+        if key and name:
+            recs[key]["name"] = name
+            count += 1
+    return count
+
+
 def collect(date8: str) -> dict:
     recs: dict[str, dict] = {}
 
@@ -72,13 +123,12 @@ def collect(date8: str) -> dict:
     # 馬名（別フォルダ）
     name_file = ROOT / "競争馬名" / f"name{date8}.csv"
     if name_file.exists():
-        for key, val in read_pairs(name_file.read_text(encoding="utf-8", errors="replace")):
-            recs.setdefault(key, {})["name"] = val
+        add_names(recs, read_text_auto(name_file), date8)
 
     # 厩舎Finish-Up（ファイル名が日付だけなのでフォルダ名がラベル）
     ky_file = ROOT / "厩舎Finish-Up" / f"{date8}.csv"
     if ky_file.exists():
-        for key, val in read_pairs(ky_file.read_text(encoding="utf-8", errors="replace")):
+        for key, val in read_pairs(read_text_auto(ky_file)):
             recs.setdefault(key, {})["厩舎Finish-Up"] = val
 
     return recs
