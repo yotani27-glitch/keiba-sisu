@@ -992,7 +992,7 @@ function racePostText(race) {
     const name = h.name ? String(h.name).trim() : '馬名なし';
     return `${h.uma} ${name} ${h.priority.toFixed(2)}`;
   });
-  return `${race.place} ${race.race}R\n${selections.join('\n')}\n\n全馬指数\n馬番 馬名 優先値\n${rows.join('\n')}`;
+  return `EUの優先指数🐎\n${race.place} ${race.race}R\n${selections.join('\n')}\n\n全馬指数\n馬番 馬名 優先値\n${rows.join('\n')}`;
 }
 
 function openRacePost(raceKey) {
