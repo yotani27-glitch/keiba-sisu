@@ -61,6 +61,25 @@ const PLACE_PRIORITY_WEIGHTS = {
 };
 const PLACE_PRIORITY_LABEL = '複勝優先指数';
 
+// ダート1801m以上だけは通常と傾向が逆転する(2026-08-19分析)。
+// 距離帯×芝ダで複勝相関を見ると、芝は距離が延びるほどＦ指数が優位になる一方、
+// ダート1801m以上だけはＳ指数がＦ指数を上回る唯一の区分(前後半とも符号一致、
+// F-S差の前後半相関0.955で高い再現性)。この区分に限りOLSで重みを再学習すると
+// (2022-2024年学習→2025-2026年検証)、1位馬の複勝率が53.1%→58.1%(+5.0pt, n=358)
+// に改善した。arms指数２はこの区分だけ回帰係数がマイナス(逆効き)だったため除外。
+const PLACE_PRIORITY_WEIGHTS_DIRT_LONG = {
+  '7tua': 6,    // Ｆ指数
+  '6tua': 7,    // Ｓ指数 — この区分だけＦ指数を上回る
+  '00tua': 3,   // LVL2
+  '厩舎Finish-Up': 3,
+  // arms指数２('11tua')はこの区分では回帰係数が負のため使わない
+};
+const DIRT_LONG_MIN_DISTANCE = 1801;
+
+function isDirtLongDistance(surface, distance) {
+  return surface === 'ダ' && Number.isFinite(distance) && distance >= DIRT_LONG_MIN_DISTANCE;
+}
+
 // レース内で 1位=1.0 / 最下位=0.0 になるよう順位を正規化する
 function normalizedRankScore(rank, fieldSize) {
   if (!rank || fieldSize < 2) return null;
@@ -306,6 +325,11 @@ function processCsvEntry(filename, text, folderLabel) {
         state.records.set(key, rec);
       }
       rec.name = name;
+      // 同じ行に芝/ダ(3列目)・距離(4列目)も入っているので、区分別重み調整に使う。
+      const surface = parts[2].trim();
+      const distance = Number(parts[3].trim());
+      if (surface) rec.surface = surface;
+      if (Number.isFinite(distance) && distance > 0) rec.distance = distance;
       count++;
       continue;
     }
@@ -374,9 +398,17 @@ function computePriorityForRace(group) {
   computeWeightedIndexForRace(group, PRIORITY_WEIGHTS, {
     score: 'priority', rank: 'priorityRank', basis: 'priorityBasis',
   });
-  computeWeightedIndexForRace(group, PLACE_PRIORITY_WEIGHTS, {
+
+  // 芝/ダ・距離が分かっている(name<日付>.csvを読み込み済み)場合だけ、
+  // ダート1801m以上に限りＳ指数優位の重みに切り替える。分からない時は従来通り。
+  const withCourse = group.find((r) => r.surface && r.distance);
+  const dirtLong = withCourse && isDirtLongDistance(withCourse.surface, withCourse.distance);
+  const placeWeights = dirtLong ? PLACE_PRIORITY_WEIGHTS_DIRT_LONG : PLACE_PRIORITY_WEIGHTS;
+
+  computeWeightedIndexForRace(group, placeWeights, {
     score: 'placePriority', rank: 'placePriorityRank', basis: 'placePriorityBasis',
   });
+  for (const r of group) r.placePriorityDirtLong = !!dirtLong;
 }
 
 // 同じ計算規則で複数の合成指数を作れるようにした共通処理。
@@ -647,6 +679,7 @@ function buildRaceSummaries() {
         : (agree === null ? null : FIRMNESS[agree]),
       byOdds: agreeOdds !== null,
       basis: byPriority[0].priorityBasis,
+      dirtLong: group.some((r) => r.placePriorityDirtLong),
     });
   }
 
@@ -1015,7 +1048,7 @@ function renderRaceList() {
         <header>
           <div class="rtitle">
             <strong>${formatDate(r.date)} ${r.place} ${r.race}R</strong>
-            <span class="rmeta">${r.fieldSize}頭 / ${r.basis}指数${shapeChipHtml(r)}</span>
+            <span class="rmeta">${r.fieldSize}頭 / ${r.basis}指数${shapeChipHtml(r)}${r.dirtLong ? '<span class="dirt-long-badge" title="ダート1801m以上のためＳ指数優位の重みで複勝優先指数を計算しています">ダ長</span>' : ''}</span>
           </div>
           ${badge}
         </header>

@@ -554,6 +554,19 @@ button.subtle {
 .race-card .shape.nikyo { color: var(--accent); }
 .race-card .shape.dango { color: var(--rough); background: var(--rough-bg); }
 
+/* ダート1801m以上：複勝優先指数がＳ指数優位の重みに切り替わっていることを示す */
+.dirt-long-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--place-priority);
+  background: color-mix(in srgb, var(--place-priority) 15%, transparent);
+  cursor: help;
+}
+
 /* 2行目: 内訳指数（値と順位）。狭いときは折り返す */
 .race-card .breakdown {
   display: flex;
