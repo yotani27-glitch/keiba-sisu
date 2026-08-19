@@ -72,7 +72,10 @@ def read_pairs(text: str) -> list[tuple[str, str]]:
 
 
 def add_names(recs: dict[str, dict], text: str, date8: str) -> int:
-    """18桁ID形式とTARGET出馬表形式のどちらからも馬名を結合する。"""
+    """18桁ID形式とTARGET出馬表形式のどちらからも馬名を結合する。
+    TARGET出馬表形式(新形式)は芝ダ・距離も持っているので、区分別の
+    複勝優先指数(ダート1801m以上)の判定用に一緒に書き出す。
+    """
     pairs = read_pairs(text)
     if pairs:
         for key, val in pairs:
@@ -98,9 +101,15 @@ def add_names(recs: dict[str, dict], text: str, date8: str) -> int:
         except ValueError:
             continue
         name = row[9].strip()
+        surface = row[2].strip()
+        distance = row[3].strip()
         key = key_by_race.get((place_code, race, uma))
         if key and name:
             recs[key]["name"] = name
+            if surface:
+                recs[key]["surface"] = surface
+            if distance.isdigit():
+                recs[key]["distance"] = int(distance)
             count += 1
     return count
 
@@ -160,9 +169,10 @@ def main(argv: list[str]) -> int:
         path.write_text(body, encoding="utf-8")
         has_name = sum(1 for v in recs.values() if "name" in v)
         has_ky = sum(1 for v in recs.values() if "厩舎Finish-Up" in v)
+        has_dist = sum(1 for v in recs.values() if "distance" in v)
         print(f"{date8}: {len(recs)}頭 / {len(body)/1024:.0f}KB"
               f"（gzip {len(gzip.compress(body.encode()))/1024:.0f}KB）"
-              f" 馬名{has_name} 厩舎{has_ky}")
+              f" 馬名{has_name} 厩舎{has_ky} 距離{has_dist}")
         written.append(date8)
 
     # 既に置いてある日付も含めて一覧を作り直す

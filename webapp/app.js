@@ -112,8 +112,8 @@ const $ = (sel) => document.querySelector(sel);
 const els = {
   loadButton: $('#loadButton'),
   syncButton: $('#syncButton'),
-  fileButton: $('#fileButton'),
-  kyushaButton: $('#kyushaButton'),
+  zipButton: $('#zipButton'),
+  csvButton: $('#csvButton'),
   clearButton: $('#clearButton'),
   loadStatus: $('#loadStatus'),
   empty: $('#empty'),
@@ -805,7 +805,7 @@ function createFilePicker(id, accept, forcedLabel, rootName) {
       const result = await processFileList(files, forcedLabel);
       afterLoad(result);
       if (skippedUnlabeled > 0) {
-        notify(`${skippedUnlabeled}件は指数名が判別できず読み飛ばしました（厩舎Finish-Upは専用ボタンから追加してください）`);
+        notify(`${skippedUnlabeled}件は指数名が判別できず読み飛ばしました（厩舎Finish-Upは「厩舎・馬名CSVを追加」から選んでください）`);
       }
     } catch (err) {
       notify(err.message || '読み込みに失敗しました');
@@ -838,6 +838,8 @@ async function fetchPublished() {
       const rec = { date, placeCode, kai, day, race, uma, scores: {}, ranks: {} };
       for (const [label, val] of Object.entries(scores)) {
         if (label === 'name') { rec.name = val; continue; }
+        if (label === 'surface') { rec.surface = val; continue; }
+        if (label === 'distance') { rec.distance = Number(val); continue; }
         const num = Number(val);
         if (!Number.isNaN(num)) { rec.scores[label] = num; state.labels.add(label); }
       }
@@ -866,6 +868,7 @@ async function saveCache() {
       records: [...state.records.values()].map((r) => ({
         date: r.date, placeCode: r.placeCode, kai: r.kai, day: r.day,
         race: r.race, uma: r.uma, name: r.name, scores: r.scores,
+        surface: r.surface, distance: r.distance,
       })),
     });
   } catch { /* 保存できなくても動作は続ける */ }
@@ -939,7 +942,7 @@ function afterLoad({ fileCount }) {
   // 馬番だけの表示になっていることに気づけるよう伝える
   const named = [...state.records.values()].filter((r) => r.name).length;
   if (named === 0) {
-    notify(`${fileCount}件を読み込みました（馬名なし。name${firstLoadedDate()}.csv も一緒に選ぶと馬名が出ます）`);
+    notify(`${fileCount}件を読み込みました（馬名なし。「厩舎・馬名CSVを追加」でname${firstLoadedDate()}.csvも選ぶと馬名が出ます）`);
   } else {
     notify(`${fileCount}件のファイルを読み込みました`);
   }
@@ -1338,18 +1341,20 @@ function exportYearCsv() {
 // ---------- イベント ----------
 els.loadButton.addEventListener('click', handleLoadClick);
 
-// iPhoneなどフォルダ選択が使えない環境向け。ファイルを直接選ぶ
-els.fileButton.addEventListener('click', () => {
-  els.filePicker = els.filePicker
-    || createFilePicker('filePicker', '.zip,.csv', '', 'ファイル選択');
-  els.filePicker.click();
+// iPhoneなどフォルダ選択が使えない環境向け。指数ZIPだけを直接選ぶ
+els.zipButton.addEventListener('click', () => {
+  els.zipPicker = els.zipPicker
+    || createFilePicker('zipPicker', '.zip', '', '指数ZIP選択');
+  els.zipPicker.click();
 });
 
-// 厩舎Finish-Upは日付だけのファイル名なので、指数名を指定して読み込む
-els.kyushaButton.addEventListener('click', () => {
-  els.kyushaPicker = els.kyushaPicker
-    || createFilePicker('kyushaPicker', '.csv,.zip', '厩舎Finish-Up', '厩舎Finish-Up追加');
-  els.kyushaPicker.click();
+// 厩舎Finish-Up・馬名CSVをまとめて選ぶ。厩舎は日付だけのファイル名で
+// 指数名が判別できないため、フォールバック用に'厩舎Finish-Up'を指定しておく
+// （name<日付>.csvは自分のファイル名から'name'ラベルを判別できるので上書きされない）。
+els.csvButton.addEventListener('click', () => {
+  els.csvPicker = els.csvPicker
+    || createFilePicker('csvPicker', '.csv', '厩舎Finish-Up', '厩舎・馬名CSV追加');
+  els.csvPicker.click();
 });
 
 // 入力した当日人気を、他の端末へ渡すリンクにする
@@ -1396,7 +1401,7 @@ els.clearButton.addEventListener('click', async () => {
 // フォルダ選択が使えない環境では、そちらのボタンを目立たせない
 if (typeof window.showDirectoryPicker !== 'function') {
   els.loadButton.classList.remove('primary');
-  els.fileButton.classList.add('primary');
+  els.zipButton.classList.add('primary');
 }
 
 function switchView(view) {
