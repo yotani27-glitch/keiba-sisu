@@ -311,6 +311,7 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
 }
 .race-card .rtitle { display: flex; flex-direction: column; gap: 2px; }
 .race-card .rmeta { font-size: 11px; color: var(--muted); }
+.post-time { margin-left: 6px; font-size: 12px; font-weight: 500; color: var(--muted); }
 
 .firmness {
   margin-left: auto;

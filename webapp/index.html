@@ -17,6 +17,7 @@
     <button id="syncButton">最新データを取得</button>
     <button id="zipButton">指数ZIPを選ぶ</button>
     <button id="csvButton" class="subtle">厩舎・馬名CSVを追加</button>
+    <button id="scheduleButton" class="subtle">発走時刻Excelを追加</button>
     <button id="clearButton" class="subtle">保存データを消す</button>
     <span id="loadStatus" class="status-text">未読み込み</span>
   </div>
@@ -30,8 +31,9 @@
     <ul class="hint file-list">
       <li>「指数ZIPを選ぶ」→ <code>2tua20260809.zip</code> … 週次の指数ZIP（これだけでも優先指数と堅さ判定は出ます）。<strong>複数まとめて選べます</strong></li>
       <li>「厩舎・馬名CSVを追加」→ <code>20260809.csv</code>（厩舎Finish-Up）と <code>name20260809.csv</code>（馬名・距離・芝ダ）を<strong>まとめて選べます</strong>。馬名を選ばないと馬番だけの表示になり、距離・芝ダが無いとダート中長距離の区分別重みも効きません</li>
+      <li>「発走時刻Excelを追加」→ <code>検討事項およびメモ_20260815_20260816.xlsx</code>（週間競馬フォルダの番組表）。選ぶとレースカードが発走時刻順に並びます</li>
     </ul>
-    <p class="hint">厩舎Finish-Up・馬名はどちらも無くても残りの指数だけで算出しますが、選んでおくほど精度・情報量が上がります。</p>
+    <p class="hint">厩舎Finish-Up・馬名・発走時刻はどれも無くても残りの情報だけで表示できますが、選んでおくほど精度・情報量が上がります。</p>
   </section>
 
   <section id="dashboard" hidden>

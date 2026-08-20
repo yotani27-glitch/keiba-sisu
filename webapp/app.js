@@ -106,6 +106,7 @@ const state = {
   view: 'races',
   popular: new Map(), // レースキー -> [人気1位の馬番, 人気2位の馬番]
   publishedDates: null, // 取り込み済みの公開データの日付一覧
+  postTimes: new Map(), // date|placeCode|race -> { time: "9:40", minutes: 580 }（発走時刻Excelから）
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -114,6 +115,7 @@ const els = {
   syncButton: $('#syncButton'),
   zipButton: $('#zipButton'),
   csvButton: $('#csvButton'),
+  scheduleButton: $('#scheduleButton'),
   clearButton: $('#clearButton'),
   loadStatus: $('#loadStatus'),
   empty: $('#empty'),
@@ -199,7 +201,8 @@ async function idbGet(key) {
 }
 
 // ---------- ZIP読み込み（依存ライブラリなし、DecompressionStreamを利用） ----------
-async function readZipEntries(buffer) {
+// .xlsxもZIPコンテナなので、生バイトを返すこの関数を指数ZIP・出馬表xlsxの両方で使う。
+async function readZipEntriesRaw(buffer) {
   const view = new DataView(buffer);
   const bytes = new Uint8Array(buffer);
 
@@ -249,15 +252,93 @@ async function readZipEntries(buffer) {
     } else {
       continue; // 未対応の圧縮方式はスキップ
     }
-    results.push({ name: entry.name, text: decodeCsv(outBytes.buffer) });
+    results.push({ name: entry.name, bytes: outBytes });
   }
   return results;
+}
+
+async function readZipEntries(buffer) {
+  const raw = await readZipEntriesRaw(buffer);
+  return raw.map(({ name, bytes }) => ({ name, text: decodeCsv(bytes.buffer) }));
 }
 
 function decodeCsv(buffer) {
   const utf8 = new TextDecoder('utf-8').decode(buffer);
   const bad = (utf8.match(/�/g) || []).length;
   return bad ? new TextDecoder('shift_jis').decode(buffer) : utf8;
+}
+
+// ---------- 発走時刻Excel読み込み(「検討事項およびメモ」形式) ----------
+// シート名が"YY.MM.DD"(例: 26.08.15)の日別シートだけを対象に、
+// B列(競馬場)・C列(R)・E列(時間、1日を1とした小数のシリアル値)を読み取る。
+// レース単位のデータ(馬番を持たない)なので、指数レコードとは別にstate.postTimesへ
+// date|placeCode|race をキーとして保存し、buildRaceSummaries()で突き合わせる。
+const PLACE_CODE_BY_NAME = Object.fromEntries(
+  Object.entries(PLACE_NAMES).map(([code, name]) => [name, code])
+);
+const XLSX_RELS_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+function xmlText(el) {
+  const t = el && el.getElementsByTagName('t')[0];
+  return t ? t.textContent : '';
+}
+
+function xmlValue(el) {
+  const v = el && el.getElementsByTagName('v')[0];
+  return v ? v.textContent : '';
+}
+
+async function processScheduleXlsx(buffer) {
+  const raw = await readZipEntriesRaw(buffer);
+  const byName = new Map(raw.map((e) => [e.name.replace(/^\/+/, ''), e.bytes]));
+  const parser = new DOMParser();
+  const parseXml = (bytes) => parser.parseFromString(new TextDecoder('utf-8').decode(bytes), 'application/xml');
+
+  const workbookBytes = byName.get('xl/workbook.xml');
+  const relsBytes = byName.get('xl/_rels/workbook.xml.rels');
+  if (!workbookBytes || !relsBytes) throw new Error('xlsxの構造を読み取れませんでした（Excelファイルではない可能性があります）');
+
+  const wbDoc = parseXml(workbookBytes);
+  const relsDoc = parseXml(relsBytes);
+
+  const targetById = new Map();
+  for (const rel of relsDoc.getElementsByTagName('Relationship')) {
+    targetById.set(rel.getAttribute('Id'), rel.getAttribute('Target').replace(/^\/+/, ''));
+  }
+
+  let count = 0;
+  for (const sheet of wbDoc.getElementsByTagName('sheet')) {
+    const name = sheet.getAttribute('name') || '';
+    const m = name.match(/^(\d{2})\.(\d{2})\.(\d{2})$/);
+    if (!m) continue; // 日別シート(YY.MM.DD)以外(該当・期待度など)は無視
+    const date8 = `20${m[1]}${m[2]}${m[3]}`;
+
+    const rId = sheet.getAttribute('r:id') || sheet.getAttributeNS(XLSX_RELS_NS, 'id');
+    const target = rId && targetById.get(rId);
+    const sheetBytes = target && byName.get(target);
+    if (!sheetBytes) continue;
+
+    const sheetDoc = parseXml(sheetBytes);
+    for (const row of sheetDoc.getElementsByTagName('row')) {
+      let place = '', race = null, timeVal = null;
+      for (const cell of row.getElementsByTagName('c')) {
+        const ref = cell.getAttribute('r') || '';
+        const col = (ref.match(/^[A-Z]+/) || [''])[0];
+        if (col === 'B') place = xmlText(cell);
+        else if (col === 'C') race = Number(xmlValue(cell));
+        else if (col === 'E') timeVal = Number(xmlValue(cell));
+      }
+      const placeCode = PLACE_CODE_BY_NAME[place];
+      if (!placeCode || !race || timeVal === null || Number.isNaN(timeVal) || Number.isNaN(race)) continue;
+      const minutes = Math.round(timeVal * 1440);
+      const hh = Math.floor(minutes / 60);
+      const mm = minutes % 60;
+      const time = `${hh}:${String(mm).padStart(2, '0')}`;
+      state.postTimes.set(`${date8}|${placeCode}|${race}`, { time, minutes });
+      count++;
+    }
+  }
+  return count;
 }
 
 // ---------- CSVパース＆ID分解 ----------
@@ -680,10 +761,14 @@ function buildRaceSummaries() {
       byOdds: agreeOdds !== null,
       basis: byPriority[0].priorityBasis,
       dirtLong: group.some((r) => r.placePriorityDirtLong),
+      postTime: state.postTimes.get(gKey)?.time || null,
+      postMinutes: state.postTimes.get(gKey)?.minutes,
     });
   }
 
+  // 発走時刻が分かるレースはその順、分からないレースは末尾へ（場・R順で安定させる）
   races.sort((a, b) => a.date.localeCompare(b.date)
+    || (a.postMinutes ?? Infinity) - (b.postMinutes ?? Infinity)
     || a.placeCode.localeCompare(b.placeCode)
     || a.race - b.race);
   return races;
@@ -815,6 +900,41 @@ function createFilePicker(id, accept, forcedLabel, rootName) {
   return input;
 }
 
+// 発走時刻Excel（「検討事項およびメモ」形式）専用の選択ボタン。
+// 指数レコードとは別のstate.postTimesに入るだけなので、processFileList/afterLoadは使わない。
+function createSchedulePicker() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx';
+  input.multiple = true;
+  input.style.display = 'none';
+  input.addEventListener('change', async () => {
+    const files = Array.from(input.files);
+    input.value = '';
+    if (!files.length) return;
+    try {
+      let count = 0;
+      for (const f of files) {
+        count += await processScheduleXlsx(await f.arrayBuffer());
+      }
+      if (count === 0) {
+        notify('発走時刻を読み取れませんでした（「検討事項およびメモ」形式のExcelを選んでください）');
+        return;
+      }
+      if (state.records.size > 0) {
+        state.races = buildRaceSummaries();
+        renderRaceList();
+      }
+      saveCache();
+      notify(`${count}レース分の発走時刻を読み込みました`);
+    } catch (err) {
+      notify(err.message || '読み込みに失敗しました');
+    }
+  });
+  document.body.appendChild(input);
+  return input;
+}
+
 // ---------- 公開データの取り込み ----------
 // PCで publish_data.py を実行して push しておくと、data/ 以下に指数が置かれる。
 // iPhone側はこれを取りに行くので、ファイルを選ばなくても最新データが見られる。
@@ -870,6 +990,7 @@ async function saveCache() {
         race: r.race, uma: r.uma, name: r.name, scores: r.scores,
         surface: r.surface, distance: r.distance,
       })),
+      postTimes: [...state.postTimes],
     });
   } catch { /* 保存できなくても動作は続ける */ }
 }
@@ -892,6 +1013,7 @@ async function restoreCache() {
   state.publishedDates = cached.publishedDates || null;
   state.hiddenLabels = new Set(cached.hiddenLabels || state.labels);
   state.knownLabels = new Set(state.labels);
+  state.postTimes = new Map(cached.postTimes || []);
 
   finalizeRecords();
   els.empty.hidden = true;
@@ -1050,7 +1172,7 @@ function renderRaceList() {
       <article class="race-card ${f ? f.key : 'unknown'}${r.byOdds ? ' confirmed' : ''}">
         <header>
           <div class="rtitle">
-            <strong>${formatDate(r.date)} ${r.place} ${r.race}R</strong>
+            <strong>${formatDate(r.date)} ${r.place} ${r.race}R${r.postTime ? `<span class="post-time">${r.postTime}</span>` : ''}</strong>
             <span class="rmeta">${r.fieldSize}頭 / ${r.basis}指数${shapeChipHtml(r)}${r.dirtLong ? '<span class="dirt-long-badge" title="ダート1801m以上のためＳ指数優位の重みで複勝優先指数を計算しています">ダ長</span>' : ''}</span>
           </div>
           ${badge}
@@ -1357,6 +1479,12 @@ els.csvButton.addEventListener('click', () => {
   els.csvPicker.click();
 });
 
+// 発走時刻Excel（週間競馬フォルダの「検討事項およびメモ」形式）を選ぶ
+els.scheduleButton.addEventListener('click', () => {
+  els.schedulePicker = els.schedulePicker || createSchedulePicker();
+  els.schedulePicker.click();
+});
+
 // 入力した当日人気を、他の端末へ渡すリンクにする
 els.sharePopButton.addEventListener('click', async () => {
   if (!state.popular.size) {
@@ -1391,6 +1519,7 @@ els.clearButton.addEventListener('click', async () => {
   state.records.clear();
   state.labels.clear();
   state.knownLabels = new Set();
+  state.postTimes.clear();
   state.races = [];
   els.dashboard.hidden = true;
   els.empty.hidden = false;
