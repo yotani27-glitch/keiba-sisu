@@ -606,15 +606,15 @@ function shapeChipHtml(r) {
     + `${p.label}<small>勝${p.winRate.toFixed(1)}% / 複${p.place.toFixed(1)}%</small></span>`;
 }
 
-// 優先1〜3位、それぞれの馬自身の勝率・複勝率をカードに常時表示する
-function shapeDetailHtml(r) {
-  if (!r.shape) return '';
-  const p = SHAPE_PATTERNS[r.shape];
-  return `<span class="shape-detail">`
-    + `優1 勝${p.winRate.toFixed(1)}%･複${p.place.toFixed(1)}% ／ `
-    + `優2 勝${p.rank2Win.toFixed(1)}%･複${p.rank2Place.toFixed(1)}% ／ `
-    + `優3 勝${p.rank3Win.toFixed(1)}%･複${p.rank3Place.toFixed(1)}%`
-    + `</span>`;
+// 優先1〜3位の馬each自身に、その型(独走/半独走/2強/団子)でのその順位の
+// 勝率・複勝率を1頭ずつ添える（4位以下や型未判定のレースには何も出さない）
+function rankRateHtml(shape, priorityRank) {
+  if (!shape || priorityRank > 3) return '';
+  const p = SHAPE_PATTERNS[shape];
+  const [win, place] = priorityRank === 1 ? [p.winRate, p.place]
+    : priorityRank === 2 ? [p.rank2Win, p.rank2Place]
+    : [p.rank3Win, p.rank3Place];
+  return `<div class="rank-rate">${p.label}の優${priorityRank}位 勝${win.toFixed(1)}%･複${place.toFixed(1)}%</div>`;
 }
 
 function raceShape(gap12, gap23) {
@@ -1302,6 +1302,7 @@ function renderRaceList() {
           </span>
         </div>
         ${breakdownHtml(h)}
+        ${rankRateHtml(r.shape, h.priorityRank)}
       </li>`;
     }).join('');
     return `
@@ -1314,7 +1315,6 @@ function renderRaceList() {
               <span class="race-name">${r.raceName}</span>
               ${r.courseType ? `<span class="surface-badge ${surfaceBadgeClass(r.courseType)}"${r.aim ? ` title="${escapeAttr(r.aim)}"` : ''}>${r.courseType}${r.raceDistance || ''}</span>` : ''}
             </span>` : ''}
-            ${shapeDetailHtml(r)}
           </div>
           ${badge}
         </header>

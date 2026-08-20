@@ -589,7 +589,9 @@ button.subtle {
 .race-card .shape.nikyo { color: var(--accent); }
 .race-card .shape.dango { color: var(--rough); background: var(--rough-bg); }
 
-.shape-detail {
+/* 優1〜3位の馬each自身に添える、その型でのその順位の勝率・複勝率 */
+.race-card .rank-rate {
+  margin: 1px 0 2px;
   font-size: 11px;
   color: var(--muted);
 }
