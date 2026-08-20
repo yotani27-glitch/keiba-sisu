@@ -547,8 +547,8 @@ button.subtle {
   opacity: .82;
 }
 .race-card .score-caution.discount { color: #78716c; }
-.race-card .score-caution.light { color: #92400e; }
-.race-card .score-caution.light-strong { color: #9a3412; border-style: dashed; }
+.race-card .score-caution.light,
+.race-card .score-caution.light-strong { color: #92400e; }
 .race-card .score-caution.discard { color: #991b1b; border-color: color-mix(in srgb, #991b1b 55%, transparent); }
 .race-card .score-strength.show-tip::after {
   content: attr(data-tip);
