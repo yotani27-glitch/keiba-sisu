@@ -116,6 +116,8 @@ const els = {
   zipButton: $('#zipButton'),
   csvButton: $('#csvButton'),
   scheduleButton: $('#scheduleButton'),
+  shareWriteButton: $('#shareWriteButton'),
+  shareReadButton: $('#shareReadButton'),
   clearButton: $('#clearButton'),
   loadStatus: $('#loadStatus'),
   empty: $('#empty'),
@@ -935,6 +937,114 @@ function createSchedulePicker() {
   return input;
 }
 
+// ---------- OneDriveなど同期フォルダ経由の端末間共有 ----------
+// GitHub Pages経由の公開データ(fetchPublished)とは別に、Gitを使わずローカルの
+// 同期フォルダ(OneDrive等)へ直接JSONを書き出す/読み込む方式。指数データが
+// 公開リポジトリを経由しないので、書き出したファイルは非公開のまま同期される。
+// 書き出しはFile System Access APIを使うためChromium系デスクトップ限定だが、
+// 読み込みは普通のファイル選択（<input type=file>）なのでiPhoneでも同じボタンで使える。
+const SHARE_HANDLE_KEY = 'shareFileHandle';
+
+function buildSharePayload() {
+  return {
+    version: 1,
+    savedAt: Date.now(),
+    rootName: state.rootName,
+    hiddenLabels: [...state.hiddenLabels],
+    records: [...state.records.values()].map((r) => ({
+      date: r.date, placeCode: r.placeCode, kai: r.kai, day: r.day,
+      race: r.race, uma: r.uma, name: r.name, scores: r.scores,
+      surface: r.surface, distance: r.distance,
+    })),
+    postTimes: [...state.postTimes],
+  };
+}
+
+function applySharePayload(payload) {
+  state.records.clear();
+  state.labels.clear();
+  for (const r of payload.records || []) {
+    const key = `${r.date}|${r.placeCode}|${r.race}|${r.uma}`;
+    state.records.set(key, { ...r, scores: r.scores || {}, ranks: {} });
+    for (const label of Object.keys(r.scores || {})) state.labels.add(label);
+  }
+  state.postTimes = new Map(payload.postTimes || []);
+  state.rootName = payload.rootName || '共有ファイル';
+  state.hiddenLabels = new Set(payload.hiddenLabels || state.labels);
+  state.knownLabels = new Set(state.labels);
+}
+
+// OneDrive等の同期フォルダにJSONを書き出す。一度選んだファイルはIndexedDBに
+// ハンドルを保存しておき、次回以降はダイアログなしで同じファイルに上書きする。
+async function writeShareFile() {
+  if (typeof window.showSaveFilePicker !== 'function') {
+    throw new Error('このブラウザでは書き出しに対応していません（PCのChrome/Edgeをお使いください）');
+  }
+  let handle = els.shareFileHandle || await idbGet(SHARE_HANDLE_KEY).catch(() => null);
+  if (handle) {
+    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') {
+      const req = await handle.requestPermission({ mode: 'readwrite' });
+      if (req !== 'granted') handle = null;
+    }
+  }
+  if (!handle) {
+    // 「フォルダを選択して読み込み」で選んだフォルダを覚えていれば、
+    // 保存ダイアログをそこから開始する（指数フォルダ内に保存しやすくする）
+    const rootDir = await idbGet('rootDir').catch(() => null);
+    const opts = {
+      suggestedName: 'keiba-shisu-share.json',
+      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+    };
+    if (rootDir) opts.startIn = rootDir;
+    handle = await window.showSaveFilePicker(opts);
+    await idbSet(SHARE_HANDLE_KEY, handle);
+  }
+  els.shareFileHandle = handle;
+
+  const writable = await handle.createWritable();
+  await writable.write(JSON.stringify(buildSharePayload()));
+  await writable.close();
+  return handle.name;
+}
+
+// 共有JSONを読み込む。ファイル選択なのでOS標準のダイアログ経由でOneDrive内の
+// ファイルも選べ、iPhoneのFilesアプリからでも同じ操作で読み込める。
+function createShareReadPicker() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.style.display = 'none';
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      const payload = JSON.parse(await file.text());
+      applySharePayload(payload);
+      finalizeRecords();
+      state.loadedAt = new Date();
+      els.empty.hidden = true;
+      els.dashboard.hidden = false;
+      populateFilterOptions();
+      renderColumnMenu();
+      renderTable();
+      state.races = buildRaceSummaries();
+      populateRaceFilters();
+      renderRaceList();
+      saveCache();
+      const when = payload.savedAt
+        ? new Date(payload.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '不明';
+      notify(`共有ファイルを読み込みました（${when}時点 / ${state.records.size}頭）`);
+    } catch (err) {
+      notify(err.message || '読み込みに失敗しました（正しい共有JSONファイルか確認してください）');
+    }
+  });
+  document.body.appendChild(input);
+  return input;
+}
+
 // ---------- 公開データの取り込み ----------
 // PCで publish_data.py を実行して push しておくと、data/ 以下に指数が置かれる。
 // iPhone側はこれを取りに行くので、ファイルを選ばなくても最新データが見られる。
@@ -1483,6 +1593,23 @@ els.csvButton.addEventListener('click', () => {
 els.scheduleButton.addEventListener('click', () => {
   els.schedulePicker = els.schedulePicker || createSchedulePicker();
   els.schedulePicker.click();
+});
+
+// OneDrive等の同期フォルダへ現在のデータをJSONで書き出す(PC側)
+els.shareWriteButton.addEventListener('click', async () => {
+  try {
+    const name = await writeShareFile();
+    notify(`「${name}」に書き出しました。OneDriveの同期が終わってから他端末で読み込んでください`);
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    notify(err.message || '書き出しに失敗しました');
+  }
+});
+
+// OneDrive等の同期フォルダから共有JSONを読み込む(PC・iPhone共通)
+els.shareReadButton.addEventListener('click', () => {
+  els.shareReadPicker = els.shareReadPicker || createShareReadPicker();
+  els.shareReadPicker.click();
 });
 
 // 入力した当日人気を、他の端末へ渡すリンクにする
