@@ -585,8 +585,14 @@ button.subtle {
 }
 .race-card .shape small { font-size: 10px; font-weight: 500; opacity: .85; }
 .race-card .shape.dokusou { color: var(--solid); background: var(--solid-bg); }
+.race-card .shape.hanDokusou { color: var(--place-priority); background: var(--place-priority-bg); }
 .race-card .shape.nikyo { color: var(--accent); }
 .race-card .shape.dango { color: var(--rough); background: var(--rough-bg); }
+
+.shape-detail {
+  font-size: 11px;
+  color: var(--muted);
+}
 
 /* ダート1801m以上：複勝優先指数がＳ指数優位の重みに切り替わっていることを示す */
 .dirt-long-badge {

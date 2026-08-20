@@ -572,34 +572,49 @@ function computeWeightedIndexForRace(group, weights, fields) {
   sorted.forEach((r, i) => { r[fields.rank] = i + 1; });
 }
 
-// ---------- 上位3頭の並び方（独走・2強・団子） ----------
+// ---------- 上位3頭の並び方（独走・半独走・2強・団子） ----------
 // 1-2位差と2-3位差を組み合わせると、1-2位差だけより分離が良い。
-// 2022-2026年・15,083レースの中央値（1-2位差0.056 / 2-3位差0.043）を境に
-// 4通りに分けたときの優先1位馬の成績:
-//   独走(1-2位差も2-3位差も中央値以上) … 1頭が頭ひとつ抜けている 勝率30.7%/複勝61.4%
-//   2強(1-2位差は中央値未満・2-3位差は以上) … 上位2頭が拮抗し、3位以下から浮いている 勝率23.3%/複勝53.9%
+// 2022-2026年・15,517レースの中央値（1-2位差0.056 / 2-3位差0.043）を境に
+// 4通りに分けたときの優先1位馬の成績（2026-08-21再集計）:
+//   独走(1-2位差も2-3位差も中央値以上) … 1頭が頭ひとつ抜けている 勝率30.5%/複勝60.9%
+//   半独走(1-2位差は中央値以上・2-3位差は未満) … 1位だけ抜けているが2-3位は団子 勝率28.0%/複勝58.8%
+//   2強(1-2位差は中央値未満・2-3位差は以上) … 上位2頭が拮抗し、3位以下から浮いている 勝率23.2%/複勝53.7%
 //   団子(1-2位差も2-3位差も中央値未満) … 3頭以上が拮抗 勝率19.5%/複勝48.9%
-//   その他(1-2位差は中央値以上・2-3位差は未満) … 明確な分類には当てはまらない
+// 半独走は独走に次ぐ好成績だが、2位馬自身の勝率は全パターン中最低(14.8%、
+// 全体平均17.7%）で、2位以下は誰が来てもおかしくない混戦であることが分かる。
 const GAP12_MEDIAN = 0.056;
 const GAP23_MEDIAN = 0.043;
 
+// rank2/rank3は「その馬自身」の勝率・複勝率(2026-08-21集計、n=3,583〜4,176)
 const SHAPE_PATTERNS = {
-  dokusou: { label: '独走', winRate: 30.7, place: 61.4,
-             hint: '1位が2位から抜け、その2位も3位以下から抜けている' },
-  nikyo:   { label: '2強', winRate: 23.3, place: 53.9,
-             hint: '1位と2位は僅差だが、2頭とも3位以下から抜けている' },
-  dango:   { label: '団子', winRate: 19.5, place: 48.9,
-             hint: '1位・2位・3位が僅差で並んでいる' },
-  other:   { label: '', winRate: null, place: null, hint: '' },
+  dokusou:    { label: '独走', winRate: 30.5, place: 60.9, rank2Win: 17.3, rank2Place: 48.0, rank3Win: 12.3, rank3Place: 37.9,
+                hint: '1位が2位から抜け、その2位も3位以下から抜けている' },
+  hanDokusou: { label: '半独走', winRate: 28.0, place: 58.8, rank2Win: 14.8, rank2Place: 43.3, rank3Win: 14.3, rank3Place: 40.1,
+                hint: '1位だけが抜けているが、2位・3位は僅差で並んでいる（2位自身の勝率は全パターン中最低）' },
+  nikyo:      { label: '2強', winRate: 23.2, place: 53.7, rank2Win: 21.3, rank2Place: 51.4, rank3Win: 13.5, rank3Place: 39.4,
+                hint: '1位と2位は僅差だが、2頭とも3位以下から抜けている' },
+  dango:      { label: '団子', winRate: 19.5, place: 48.9, rank2Win: 17.5, rank2Place: 46.9, rank3Win: 15.6, rank3Place: 40.8,
+                hint: '1位・2位・3位が僅差で並んでいる' },
 };
 
 function shapeChipHtml(r) {
-  if (!r.shape || r.shape === 'other') return '';
+  if (!r.shape) return '';
   const p = SHAPE_PATTERNS[r.shape];
   const gap12 = r.gap12.toFixed(3), gap23 = r.gap23.toFixed(3);
   return ` / <span class="shape ${r.shape}" `
     + `title="${p.hint}。この型の優先1位馬は勝率${p.winRate}%・複勝率${p.place}%（1-2位差${gap12} / 2-3位差${gap23}）">`
     + `${p.label}<small>勝${p.winRate.toFixed(1)}% / 複${p.place.toFixed(1)}%</small></span>`;
+}
+
+// 優先1〜3位、それぞれの馬自身の勝率・複勝率をカードに常時表示する
+function shapeDetailHtml(r) {
+  if (!r.shape) return '';
+  const p = SHAPE_PATTERNS[r.shape];
+  return `<span class="shape-detail">`
+    + `優1 勝${p.winRate.toFixed(1)}%･複${p.place.toFixed(1)}% ／ `
+    + `優2 勝${p.rank2Win.toFixed(1)}%･複${p.rank2Place.toFixed(1)}% ／ `
+    + `優3 勝${p.rank3Win.toFixed(1)}%･複${p.rank3Place.toFixed(1)}%`
+    + `</span>`;
 }
 
 function raceShape(gap12, gap23) {
@@ -608,7 +623,7 @@ function raceShape(gap12, gap23) {
   if (wide12 && wide23) return 'dokusou';
   if (!wide12 && wide23) return 'nikyo';
   if (!wide12 && !wide23) return 'dango';
-  return 'other';
+  return 'hanDokusou';
 }
 
 // ---------- 優先値の強さ目印 ----------
@@ -1299,6 +1314,7 @@ function renderRaceList() {
               <span class="race-name">${r.raceName}</span>
               ${r.courseType ? `<span class="surface-badge ${surfaceBadgeClass(r.courseType)}"${r.aim ? ` title="${escapeAttr(r.aim)}"` : ''}>${r.courseType}${r.raceDistance || ''}</span>` : ''}
             </span>` : ''}
+            ${shapeDetailHtml(r)}
           </div>
           ${badge}
         </header>
