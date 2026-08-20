@@ -1,7 +1,15 @@
-# 引き継ぎメモ（2026-08-19更新）
+# 引き継ぎメモ（2026-08-20更新）
 
 競馬指数プロジェクト。分析→優先指数の設計→webapp実装まで一通り完了。
 このメモは Claude セッションから Codex／次のClaudeセッションへ引き継ぐためのもの。
+
+## 2026-08-20の作業（PC→端末間共有をGit不要のOneDrive方式へ全面移行）
+
+- **発端**：8/16分のデータが「最新データを取得」で表示されない、という報告。原因は`publish_data.py`が8/15までしか手動実行されておらず、`webapp/data/`（GitHub Pages公開データ）に8/16が反映されていなかったこと。「最新データを取得」は公開済みデータを取ってくるだけで、新しい日付を自動追加する仕組みではないため、この手動publishステップを忘れると新着分が他端末に届かないという構造的な問題があった。
+- **ユーザー判断で、Git経由の公開データ方式を完全に廃止しOneDrive直接共有方式に一本化**。既に前日(8/19)に実装していた「OneDriveへ書き出す」（`writeShareFile()`、File System Access APIでOneDrive等の同期フォルダに直接JSON書き出し、PC限定）「OneDriveから読み込む」（`createShareReadPicker()`、`<input type=file>`なのでiPhoneでも同じボタンで使える）の2ボタンだけを正式な共有経路とした。
+- **削除したもの**：`publish_data.py`、`webapp/data/`以下の公開JSON全て（`index.json`と日付ごとのJSON）、`app.js`の`fetchPublished()`・`syncButton`・`state.publishedDates`・起動時の公開データチェック処理。`webapp/README.md`の該当セクションも書き換え済み。
+- **効果**：指数データが公開リポジトリ（`yotani27-glitch/keiba-sisu`）を一切経由しなくなった。以前は「本当は公開したくないデータを、cross-device共有のためだけに公開リポジトリに置く」というプライバシー上のトレードオフを許容していたが、これが解消された。
+- **残る制約**：iPhone(Safari)はFile System Access API非対応のため、読み込み側は「OneDriveから読み込む」ボタンでファイルを1回選ぶ操作が必須（完全自動化は不可）。書き出し側もChromium系デスクトップ限定（PC側はChrome/Edgeを使用中なので問題なし）。
 
 ## 2026-08-19の作業（複勝率相関の指数別分析＋区分別複勝優先指数の実装）
 
@@ -33,7 +41,7 @@
 - `yotani27-glitch/keiba-sisu`（**公開**リポジトリ、GitHub Pages配信）
 - 公開URL: https://yotani27-glitch.github.io/keiba-sisu/
 - push すると数分でPagesに自動デプロイされる（`.github/workflows/pages.yml`）
-- **注意**: 公開リポジトリなので、指数の生データや購読データそのものは絶対に置かない。webappは「ブラウザがローカルのZIP/CSVを読む」方式が基本で、データはリポジトリに含めていない（例外は後述の`webapp/data/`）
+- **注意**: 公開リポジトリなので、指数の生データや購読データそのものは絶対に置かない。webappは「ブラウザがローカルのZIP/CSVを読む」方式が基本で、データはリポジトリに含めていない（2026-08-20より、端末間共有もOneDrive経由に一本化したため`webapp/data/`のような公開データ置き場も廃止済み）
 
 ## ディレクトリ構成
 
@@ -41,16 +49,12 @@
 指数/                          ← このリポジトリのルート
 ├── priority_index.py          ← マスターCSVに優先指数列を追加するツール（ローカル専用、非コミット）
 ├── weekly_priority_report.py  ← 未確定レースの優先指数ランキングをテキスト出力（ローカル専用）
-├── publish_data.py            ← 週次ZIPからwebapp/data/用JSONを書き出す（コミット対象）
 ├── HANDOFF.md                 ← このファイル
 └── webapp/
     ├── index.html
     ├── app.js                 ← メインロジック（すべてここに集約、680行→1000行超）
     ├── styles.css
-    ├── README.md               ← 機能の使い方・実測値の説明（詳しいのでまず読む）
-    └── data/                   ← publish_data.py の出力（公開データ、コミット対象）
-        ├── index.json          ← 公開済み日付一覧
-        └── <日付8桁>.json       ← 1日分の指数（値のみ、6ラベル+馬名）
+    └── README.md               ← 機能の使い方・実測値の説明（詳しいのでまず読む）
 
 指数フォルダ/                  ← 週次ZIPの置き場（TARGET frontier形式、gitignore対象）
 競争馬名/                      ← TARGET出馬表CSV（name<日付8桁>.csv、gitignore対象。
@@ -104,7 +108,7 @@ Desktop側は別のgitリポジトリ（Codexのサンドボックス、所有�
 4. **当日人気の入力** — `.popular-input`、`localStorage`キー`keiba-popular-v1`
 5. **内訳指数の表示**（Ｆ・Ｓ・arms2・厩舎、値と順位、馬番順・全頭表示） — `BREAKDOWN`配列（表示順は厩>S>F>ar、ユーザー指定）
 6. **読み込みデータの永続化** — IndexedDB（`saveCache()`/`restoreCache()`、生の値のみ保存し順位・優先スコアは開くたび再計算）
-7. **PC→iPhoneのデータ共有** — `publish_data.py`で`webapp/data/`に書き出し→push→全端末が自動取得（`fetchPublished()`）
+7. **PC→iPhoneのデータ共有（OneDrive経由、2026-08-20全面移行）** — `writeShareFile()`でOneDrive同期フォルダにJSON書き出し（PC限定）→`createShareReadPicker()`で他端末がファイル選択して読み込み。Git不要、指数データは公開リポジトリを経由しない
 8. **当日人気の共有リンク** — `encodePopular()`/`decodePopular()`、URLの`#pop=...`に載せる（サーバー不要）
 9. **iPhone向けファイル選択** — フォルダ選択非対応のiOS用に`createFilePicker()`でZIP単体選択に対応
 10. **区分別複勝優先指数（2026-08-19実装）** — ダート1801m以上だけＳ指数優位の重みに切り替える。詳細は次項。
@@ -119,14 +123,14 @@ Desktop側は別のgitリポジトリ（Codexのサンドボックス、所有�
 
 **注意**：この機能を使うには`name<日付>.csv`を毎回読み込む必要がある（従来は馬名表示のためだけだったが、今後は区分判定にも必須になった）。読み込んでいないレースは自動的に従来の重みにフォールバックするので壊れることはないが、精度向上の恩恵を受けるには読み込みが必要。
 
-## 週次の運用フロー（ユーザーへの説明済み内容）
+## 週次の運用フロー（2026-08-20更新、Git不要）
 
-1. PCで週次ZIPをダウンロードして`指数フォルダ`に保存（従来通り）
-2. `python publish_data.py` を実行 → `webapp/data/`に書き出し
-3. `git add webapp/data && git commit -m "指数データを更新" && git push`
-4. 以降どの端末もURLを開くだけで最新データが自動表示（前回と同じ内容なら再取得しない）
+1. PCで週次ZIP・馬名CSV・厩舎Finish-Up CSV・発走時刻Excelをダウンロードしてそれぞれの置き場に保存（従来通り）
+2. webappの各ボタンで読み込む（指数ZIP／厩舎・馬名CSV／発走時刻Excel）
+3. PCで「**OneDriveへ書き出す**」を押す → OneDrive同期フォルダにJSONが書き出される（初回のみ保存先を選ぶ、以降は上書き）
+4. OneDriveの同期を待ってから、他端末で「**OneDriveから読み込む**」→ 同じファイルを選ぶ
 5. 当日、人気を確認して各レースカードに入力 → 堅さ判定が確定オッズ基準に切替
-6. 他端末でも見たい場合は「共有リンクを作る」→ 自分に送る
+6. 当日人気だけを他端末に送りたい場合は引き続き「共有リンクを作る」が使える（こちらはURL埋め込み方式でOneDriveとは別経路）
 
 ## 積み残しタスク（次のセッションでやること）
 

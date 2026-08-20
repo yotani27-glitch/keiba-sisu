@@ -105,14 +105,12 @@ const state = {
   raceFilters: { date: '', place: '', firmness: '' },
   view: 'races',
   popular: new Map(), // レースキー -> [人気1位の馬番, 人気2位の馬番]
-  publishedDates: null, // 取り込み済みの公開データの日付一覧
   postTimes: new Map(), // date|placeCode|race -> { time: "9:40", minutes: 580 }（発走時刻Excelから）
 };
 
 const $ = (sel) => document.querySelector(sel);
 const els = {
   loadButton: $('#loadButton'),
-  syncButton: $('#syncButton'),
   zipButton: $('#zipButton'),
   csvButton: $('#csvButton'),
   scheduleButton: $('#scheduleButton'),
@@ -938,9 +936,9 @@ function createSchedulePicker() {
 }
 
 // ---------- OneDriveなど同期フォルダ経由の端末間共有 ----------
-// GitHub Pages経由の公開データ(fetchPublished)とは別に、Gitを使わずローカルの
-// 同期フォルダ(OneDrive等)へ直接JSONを書き出す/読み込む方式。指数データが
-// 公開リポジトリを経由しないので、書き出したファイルは非公開のまま同期される。
+// Gitを使わずローカルの同期フォルダ(OneDrive等)へ直接JSONを書き出す/読み込む方式。
+// 指数データが公開リポジトリを経由しないので、書き出したファイルは非公開のまま同期される。
+// （2026-08-20 GitHub Pages経由の公開データ方式(publish_data.py)から全面移行した）
 // 書き出しはFile System Access APIを使うためChromium系デスクトップ限定だが、
 // 読み込みは普通のファイル選択（<input type=file>）なのでiPhoneでも同じボタンで使える。
 const SHARE_HANDLE_KEY = 'shareFileHandle';
@@ -1045,43 +1043,6 @@ function createShareReadPicker() {
   return input;
 }
 
-// ---------- 公開データの取り込み ----------
-// PCで publish_data.py を実行して push しておくと、data/ 以下に指数が置かれる。
-// iPhone側はこれを取りに行くので、ファイルを選ばなくても最新データが見られる。
-async function fetchPublished() {
-  const res = await fetch('data/index.json', { cache: 'no-store' });
-  if (!res.ok) throw new Error('公開データが見つかりません');
-  const { dates } = await res.json();
-  if (!dates || !dates.length) throw new Error('公開データが空です');
-  state.publishedDates = dates.join(',');
-
-  state.records.clear();
-  state.labels.clear();
-  let horses = 0;
-  for (const date8 of dates) {
-    const r = await fetch(`data/${date8}.json`, { cache: 'no-store' });
-    if (!r.ok) continue;
-    const recs = await r.json();
-    for (const [id18, scores] of Object.entries(recs)) {
-      const { date, placeCode, kai, day, race, uma } = decodeKey(id18);
-      const key = `${date}|${placeCode}|${race}|${uma}`;
-      const rec = { date, placeCode, kai, day, race, uma, scores: {}, ranks: {} };
-      for (const [label, val] of Object.entries(scores)) {
-        if (label === 'name') { rec.name = val; continue; }
-        if (label === 'surface') { rec.surface = val; continue; }
-        if (label === 'distance') { rec.distance = Number(val); continue; }
-        const num = Number(val);
-        if (!Number.isNaN(num)) { rec.scores[label] = num; state.labels.add(label); }
-      }
-      state.records.set(key, rec);
-      horses++;
-    }
-  }
-  if (!horses) throw new Error('公開データを読み取れませんでした');
-  state.rootName = '公開データ';
-  return { fileCount: dates.length };
-}
-
 // ---------- 読み込んだデータの保存・復元 ----------
 // 毎回ファイルを選び直すのは手間なので、読み込んだ指数をブラウザに残す。
 // 順位や優先スコアは保存せず、生の値だけを残して復元時に計算し直す。
@@ -1093,7 +1054,6 @@ async function saveCache() {
     await idbSet(CACHE_KEY, {
       savedAt: Date.now(),
       rootName: state.rootName,
-      publishedDates: state.publishedDates,
       hiddenLabels: [...state.hiddenLabels],
       records: [...state.records.values()].map((r) => ({
         date: r.date, placeCode: r.placeCode, kai: r.kai, day: r.day,
@@ -1120,7 +1080,6 @@ async function restoreCache() {
     for (const label of Object.keys(r.scores || {})) state.labels.add(label);
   }
   state.rootName = cached.rootName || '前回の読み込み';
-  state.publishedDates = cached.publishedDates || null;
   state.hiddenLabels = new Set(cached.hiddenLabels || state.labels);
   state.knownLabels = new Set(state.labels);
   state.postTimes = new Map(cached.postTimes || []);
@@ -1628,16 +1587,6 @@ els.sharePopButton.addEventListener('click', async () => {
   }
 });
 
-// PCで公開したデータを取りに行く
-els.syncButton.addEventListener('click', async () => {
-  try {
-    afterLoad(await fetchPublished());
-    notify('最新の公開データを取り込みました');
-  } catch (err) {
-    notify(err.message || '公開データを取得できませんでした');
-  }
-});
-
 // 保存済みの指数と、当日入力した人気をまとめて消す
 els.clearButton.addEventListener('click', async () => {
   await idbSet(CACHE_KEY, null).catch(() => {});
@@ -1830,29 +1779,11 @@ if (sharedPop) {
   if (location.hash) location.hash = '';
 }
 
-// 起動時の読み込み。PCで公開したデータがあればそれを優先し、
-// 前回と同じ内容なら取り直さずキャッシュを使う。
+// 起動時の読み込み。前回のキャッシュがあればそのまま表示する。
 (async () => {
-  let published = null;
-  try {
-    const res = await fetch('data/index.json', { cache: 'no-store' });
-    if (res.ok) published = (await res.json()).dates?.join(',') || null;
-  } catch { /* 公開データ無し・オフラインならキャッシュに任せる */ }
-
   const restored = await restoreCache();
-
   const popMsg = importedPop ? `／当日人気${importedPop}レース分を取り込みました` : '';
 
-  if (published && published !== state.publishedDates) {
-    try {
-      afterLoad(await fetchPublished());
-      notify('最新の公開データを取り込みました' + popMsg);
-      return;
-    } catch (err) {
-      if (!restored) notify(err.message);
-      return;
-    }
-  }
   if (restored) {
     // 共有リンクで人気が増えていれば、判定を出し直す
     if (importedPop) {
