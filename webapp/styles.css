@@ -14,6 +14,12 @@
   --popular2-border: #1d4ed8;
   --place-priority: #047857;
   --place-priority-bg: #d1fae5;
+  --turf: #15803d;
+  --turf-bg: #dcfce7;
+  --dirt: #92400e;
+  --dirt-bg: #fef3c7;
+  --jump: #4b5563;
+  --jump-bg: #e5e7eb;
   font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
@@ -31,6 +37,12 @@
     --popular2-border: #60a5fa;
     --place-priority: #6ee7b7;
     --place-priority-bg: #064e3b;
+    --turf: #4ade80;
+    --turf-bg: #14532d;
+    --dirt: #fbbf24;
+    --dirt-bg: #451a03;
+    --jump: #cbd5e1;
+    --jump-bg: #374151;
   }
 }
 
@@ -312,6 +324,27 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
 .race-card .rtitle { display: flex; flex-direction: column; gap: 2px; }
 .race-card .rmeta { font-size: 11px; color: var(--muted); }
 .post-time { margin-left: 6px; font-size: 12px; font-weight: 500; color: var(--muted); }
+
+.rcourse {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.rcourse .race-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.surface-badge {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.surface-badge.turf { color: var(--turf); background: var(--turf-bg); }
+.surface-badge.dirt { color: var(--dirt); background: var(--dirt-bg); }
+.surface-badge.jump { color: var(--jump); background: var(--jump-bg); }
+.surface-badge[title] { cursor: help; }
 
 .firmness {
   margin-left: auto;

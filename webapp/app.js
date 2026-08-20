@@ -270,9 +270,15 @@ function decodeCsv(buffer) {
 
 // ---------- 発走時刻Excel読み込み(「検討事項およびメモ」形式) ----------
 // シート名が"YY.MM.DD"(例: 26.08.15)の日別シートだけを対象に、
-// B列(競馬場)・C列(R)・E列(時間、1日を1とした小数のシリアル値)を読み取る。
-// レース単位のデータ(馬番を持たない)なので、指数レコードとは別にstate.postTimesへ
-// date|placeCode|race をキーとして保存し、buildRaceSummaries()で突き合わせる。
+// B列(競馬場)・C列(R)・D列(レース名)・E列(時間、1日を1とした小数のシリアル値)・
+// F列(芝/ダ/障害)・G列(距離)を読み取る。レース単位のデータ(馬番を持たない)なので、
+// 指数レコードとは別にstate.postTimesへ date|placeCode|race をキーとして保存し、
+// buildRaceSummaries()で突き合わせる。
+//
+// 「該当」シート(A競馬場/B芝ダ/C距離/E狙い目コメント)も合わせて読み、
+// 場+芝ダ+距離が一致する行があれば狙い目テキストを引く。I列の「狙い目」自体は
+// VLOOKUP数式で、openpyxl書き出しのためキャッシュ値が空(<v></v>)になっており
+// 直接は読めない。そのため該当シートを自前で読んで同じ突き合わせをする。
 const PLACE_CODE_BY_NAME = Object.fromEntries(
   Object.entries(PLACE_NAMES).map(([code, name]) => [name, code])
 );
@@ -286,6 +292,30 @@ function xmlText(el) {
 function xmlValue(el) {
   const v = el && el.getElementsByTagName('v')[0];
   return v ? v.textContent : '';
+}
+
+function xlsxColOf(cell) {
+  const ref = cell.getAttribute('r') || '';
+  return (ref.match(/^[A-Z]+/) || [''])[0];
+}
+
+// 「該当」シートを読み、場+芝ダ+距離 -> 狙い目コメント のMapを作る
+function readAimSheet(sheetDoc) {
+  const map = new Map();
+  for (const row of sheetDoc.getElementsByTagName('row')) {
+    let place = '', surface = '', distance = '', aim = '';
+    for (const cell of row.getElementsByTagName('c')) {
+      const col = xlsxColOf(cell);
+      if (col === 'A') place = xmlText(cell);
+      else if (col === 'B') surface = xmlText(cell);
+      else if (col === 'C') distance = xmlText(cell);
+      else if (col === 'E') aim = xmlText(cell);
+    }
+    if (place && surface && distance && aim) {
+      map.set(`${place}${surface}${distance}`, aim);
+    }
+  }
+  return map;
 }
 
 async function processScheduleXlsx(buffer) {
@@ -306,6 +336,19 @@ async function processScheduleXlsx(buffer) {
     targetById.set(rel.getAttribute('Id'), rel.getAttribute('Target').replace(/^\/+/, ''));
   }
 
+  const sheetBytesByName = (sheetName) => {
+    for (const sheet of wbDoc.getElementsByTagName('sheet')) {
+      if (sheet.getAttribute('name') !== sheetName) continue;
+      const rId = sheet.getAttribute('r:id') || sheet.getAttributeNS(XLSX_RELS_NS, 'id');
+      const target = rId && targetById.get(rId);
+      return target && byName.get(target);
+    }
+    return null;
+  };
+
+  const aimSheetBytes = sheetBytesByName('該当');
+  const aimMap = aimSheetBytes ? readAimSheet(parseXml(aimSheetBytes)) : new Map();
+
   let count = 0;
   for (const sheet of wbDoc.getElementsByTagName('sheet')) {
     const name = sheet.getAttribute('name') || '';
@@ -320,13 +363,15 @@ async function processScheduleXlsx(buffer) {
 
     const sheetDoc = parseXml(sheetBytes);
     for (const row of sheetDoc.getElementsByTagName('row')) {
-      let place = '', race = null, timeVal = null;
+      let place = '', race = null, raceName = '', timeVal = null, courseType = '', distance = '';
       for (const cell of row.getElementsByTagName('c')) {
-        const ref = cell.getAttribute('r') || '';
-        const col = (ref.match(/^[A-Z]+/) || [''])[0];
+        const col = xlsxColOf(cell);
         if (col === 'B') place = xmlText(cell);
         else if (col === 'C') race = Number(xmlValue(cell));
+        else if (col === 'D') raceName = xmlText(cell);
         else if (col === 'E') timeVal = Number(xmlValue(cell));
+        else if (col === 'F') courseType = xmlText(cell);
+        else if (col === 'G') distance = xmlText(cell);
       }
       const placeCode = PLACE_CODE_BY_NAME[place];
       if (!placeCode || !race || timeVal === null || Number.isNaN(timeVal) || Number.isNaN(race)) continue;
@@ -334,7 +379,10 @@ async function processScheduleXlsx(buffer) {
       const hh = Math.floor(minutes / 60);
       const mm = minutes % 60;
       const time = `${hh}:${String(mm).padStart(2, '0')}`;
-      state.postTimes.set(`${date8}|${placeCode}|${race}`, { time, minutes });
+      const aim = (courseType && distance) ? aimMap.get(`${place}${courseType}${distance}`) || null : null;
+      state.postTimes.set(`${date8}|${placeCode}|${race}`, {
+        time, minutes, raceName, courseType, distance, aim,
+      });
       count++;
     }
   }
@@ -763,6 +811,10 @@ function buildRaceSummaries() {
       dirtLong: group.some((r) => r.placePriorityDirtLong),
       postTime: state.postTimes.get(gKey)?.time || null,
       postMinutes: state.postTimes.get(gKey)?.minutes,
+      raceName: state.postTimes.get(gKey)?.raceName || null,
+      courseType: state.postTimes.get(gKey)?.courseType || null,
+      raceDistance: state.postTimes.get(gKey)?.distance || null,
+      aim: state.postTimes.get(gKey)?.aim || null,
     });
   }
 
@@ -1243,6 +1295,10 @@ function renderRaceList() {
           <div class="rtitle">
             <strong>${formatDate(r.date)} ${r.place} ${r.race}R${r.postTime ? `<span class="post-time">${r.postTime}</span>` : ''}</strong>
             <span class="rmeta">${r.fieldSize}頭 / ${r.basis}指数${shapeChipHtml(r)}${r.dirtLong ? '<span class="dirt-long-badge" title="ダート1801m以上のためＳ指数優位の重みで複勝優先指数を計算しています">ダ長</span>' : ''}</span>
+            ${r.raceName ? `<span class="rcourse">
+              <span class="race-name">${r.raceName}</span>
+              ${r.courseType ? `<span class="surface-badge ${surfaceBadgeClass(r.courseType)}"${r.aim ? ` title="${escapeAttr(r.aim)}"` : ''}>${r.courseType}${r.raceDistance || ''}</span>` : ''}
+            </span>` : ''}
           </div>
           ${badge}
         </header>
@@ -1296,6 +1352,17 @@ function openRacePost(raceKey) {
 // ---------- フィルタUI ----------
 function formatDate(d) {
   return `${d.slice(0, 4)}/${d.slice(4, 6)}/${d.slice(6, 8)}`;
+}
+
+// 芝=緑・ダ=茶・それ以外(障害など)=グレー
+function surfaceBadgeClass(courseType) {
+  if (courseType === '芝') return 'turf';
+  if (courseType === 'ダ') return 'dirt';
+  return 'jump';
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function populateFilterOptions() {
