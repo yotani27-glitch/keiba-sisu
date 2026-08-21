@@ -35,7 +35,7 @@
       <li>「指数ZIPを選ぶ」→ <code>2tua20260809.zip</code> … 週次の指数ZIP（これだけでも優先指数と堅さ判定は出ます）。<strong>複数まとめて選べます</strong></li>
       <li>「厩舎・馬名CSVを追加」→ <code>20260809.csv</code>（厩舎Finish-Up）と <code>name20260809.csv</code>（馬名・距離・芝ダ）を<strong>まとめて選べます</strong>。馬名を選ばないと馬番だけの表示になり、距離・芝ダが無いとダート中長距離の区分別重みも効きません</li>
       <li>「発走時刻Excelを追加」→ <code>検討事項およびメモ_20260815_20260816.xlsx</code>（週間競馬フォルダの番組表）。選ぶとレースカードが発走時刻順に並びます</li>
-      <li>「GTVを追加」→ <code>GTV_2026-08-22_complete.csv</code>（日付,場,R,枠,番,馬名の形式）。選ぶと該当馬の馬名の横に「GTV」の印が付きます</li>
+      <li>「GTVを追加」→ <code>GTV_2026-08-22_complete.csv</code>（場,R,枠,番,馬名の形式。日付列があればそれを使い、無ければファイル名の日付を使います）。選ぶと該当馬の馬名の横に「GTV」の印が付きます</li>
       <li>「消し馬を追加」→ 同じ形式のCSV。選ぶと該当馬の馬名の横にグレーの「△」の印が付きます</li>
     </ul>
     <p class="hint">厩舎Finish-Up・馬名・発走時刻・GTV・消し馬はどれも無くても残りの情報だけで表示できますが、選んでおくほど精度・情報量が上がります。</p>
@@ -130,6 +130,6 @@
   <div id="toast" class="toast"></div>
 </main>
 
-<script src="app.js?v=20260822-5"></script>
+<script src="app.js?v=20260822-6"></script>
 </body>
 </html>

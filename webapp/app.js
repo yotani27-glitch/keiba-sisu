@@ -399,7 +399,16 @@ async function processScheduleXlsx(buffer) {
 // "2026-08-22"のハイフン区切り。場は場所コード変換用のPLACE_SHORT_CODES
 // (1文字)と同じ表記。指数レコードとは値を持たない印だけなので、
 // date|placeCode|race|uma のキーだけをSetで持つ（read側のprocessCsvEntryとは別経路）。
-function parseFlagCsvKeys(text, label) {
+// ファイル名の先頭付近にある"2026-08-22"のような日付を拾う（日付列が
+// 無い形式のフォールバック用）。例: 2026-08-22_keshiuma.csv
+function dateFromFilename(filename) {
+  const m = (filename || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1]}${m[2]}${m[3]}` : null;
+}
+
+// 日付列(「日付」)は無くてもよい。その場合はfallbackDate8（ファイル名から
+// 拾った日付）を全行に使う。両方無ければエラーにする。
+function parseFlagCsvKeys(text, label, fallbackDate8) {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return [];
   const header = lines[0].split(',').map((s) => s.trim());
@@ -409,13 +418,16 @@ function parseFlagCsvKeys(text, label) {
     race: header.indexOf('R'),
     uma: header.indexOf('番'),
   };
-  if (idx.date < 0 || idx.place < 0 || idx.race < 0 || idx.uma < 0) {
-    throw new Error(`${label} CSVの列（日付,場,R,番）が見つかりません`);
+  if (idx.place < 0 || idx.race < 0 || idx.uma < 0) {
+    throw new Error(`${label} CSVの列（場,R,番）が見つかりません`);
+  }
+  if (idx.date < 0 && !fallbackDate8) {
+    throw new Error(`${label} CSVに日付列が無く、ファイル名からも日付を判別できません（例: 2026-08-22_〇〇.csv）`);
   }
   const keys = [];
   for (const line of lines.slice(1)) {
     const cols = line.split(',');
-    const date8 = (cols[idx.date] || '').trim().replace(/-/g, '');
+    const date8 = idx.date >= 0 ? (cols[idx.date] || '').trim().replace(/-/g, '') : fallbackDate8;
     const placeCode = PLACE_SHORT_CODES[(cols[idx.place] || '').trim()];
     const race = Number((cols[idx.race] || '').trim());
     const uma = Number((cols[idx.uma] || '').trim());
@@ -425,14 +437,14 @@ function parseFlagCsvKeys(text, label) {
   return keys;
 }
 
-function processGtvCsv(text) {
-  const keys = parseFlagCsvKeys(text, 'GTV');
+function processGtvCsv(text, filename) {
+  const keys = parseFlagCsvKeys(text, 'GTV', dateFromFilename(filename));
   for (const k of keys) state.gtvFlags.add(k);
   return keys.length;
 }
 
-function processKeshiCsv(text) {
-  const keys = parseFlagCsvKeys(text, '消し馬');
+function processKeshiCsv(text, filename) {
+  const keys = parseFlagCsvKeys(text, '消し馬', dateFromFilename(filename));
   for (const k of keys) state.keshiFlags.add(k);
   return keys.length;
 }
@@ -1059,7 +1071,7 @@ function createFlagPicker(processFn, clearFn, noun) {
       clearFn();
       let count = 0;
       for (const f of files) {
-        count += processFn(decodeCsv(await f.arrayBuffer()));
+        count += processFn(decodeCsv(await f.arrayBuffer()), f.name);
       }
       if (count === 0) {
         notify(`${noun}の印を読み取れませんでした（「日付,場,R,枠,番,馬名」形式のCSVか確認してください）`);
