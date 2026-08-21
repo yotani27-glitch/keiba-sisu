@@ -1042,7 +1042,10 @@ function createSchedulePicker() {
 
 // 印付けCSV（GTV・消し馬）共通の選択ボタン。指数レコードとは別のSetに
 // 印を足すだけなので、既存のレース一覧をそのまま再描画すればよい。
-function createFlagPicker(processFn, noun) {
+// clearFnはボタンを押すたびに1回だけ呼ぶ（複数ファイルまとめて選んだ場合は
+// その選択内では積み上げる）。誤ったファイルを選んでも、選び直せば
+// 前回分の印は残らず置き換わる。
+function createFlagPicker(processFn, clearFn, noun) {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.csv';
@@ -1053,6 +1056,7 @@ function createFlagPicker(processFn, noun) {
     input.value = '';
     if (!files.length) return;
     try {
+      clearFn();
       let count = 0;
       for (const f of files) {
         count += processFn(decodeCsv(await f.arrayBuffer()));
@@ -1063,7 +1067,7 @@ function createFlagPicker(processFn, noun) {
       }
       if (state.records.size > 0) renderRaceList();
       saveCache();
-      notify(`${count}頭に${noun}の印を付けました`);
+      notify(`${count}頭に${noun}の印を付けました（前回分は置き換わりました）`);
     } catch (err) {
       notify(err.message || '読み込みに失敗しました');
     }
@@ -1721,13 +1725,13 @@ els.scheduleButton.addEventListener('click', () => {
 
 // GTV(抑え馬)CSVを選ぶ
 els.gtvButton.addEventListener('click', () => {
-  els.gtvPicker = els.gtvPicker || createFlagPicker(processGtvCsv, 'GTV');
+  els.gtvPicker = els.gtvPicker || createFlagPicker(processGtvCsv, () => state.gtvFlags.clear(), 'GTV');
   els.gtvPicker.click();
 });
 
 // 消し馬CSVを選ぶ
 els.keshiButton.addEventListener('click', () => {
-  els.keshiPicker = els.keshiPicker || createFlagPicker(processKeshiCsv, '消し馬');
+  els.keshiPicker = els.keshiPicker || createFlagPicker(processKeshiCsv, () => state.keshiFlags.clear(), '消し馬');
   els.keshiPicker.click();
 });
 
