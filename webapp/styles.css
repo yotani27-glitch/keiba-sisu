@@ -416,6 +416,16 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
 @media (prefers-color-scheme: dark) {
   .race-card .gtv-badge { color: #c4b5fd; }
 }
+.race-card .keshi-badge {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--dirt);
+  border: 1px solid color-mix(in srgb, var(--dirt) 42%, transparent);
+  cursor: help;
+}
 
 @media (max-width: 600px) {
   .toolbar { padding: 12px; }
