@@ -106,6 +106,7 @@ const state = {
   view: 'races',
   popular: new Map(), // レースキー -> [人気1位の馬番, 人気2位の馬番]
   postTimes: new Map(), // date|placeCode|race -> { time: "9:40", minutes: 580 }（発走時刻Excelから）
+  gtvFlags: new Set(), // date|placeCode|race|uma のSet（GTV CSVで抑え馬として印を付けた馬）
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -114,6 +115,7 @@ const els = {
   zipButton: $('#zipButton'),
   csvButton: $('#csvButton'),
   scheduleButton: $('#scheduleButton'),
+  gtvButton: $('#gtvButton'),
   shareWriteButton: $('#shareWriteButton'),
   shareReadButton: $('#shareReadButton'),
   clearButton: $('#clearButton'),
@@ -385,6 +387,38 @@ async function processScheduleXlsx(buffer) {
       });
       count++;
     }
+  }
+  return count;
+}
+
+// ---------- GTV(抑え馬)CSV読み込み ----------
+// 「日付,場,R,枠,番,馬名」形式のヘッダー付きCSV。日付は"2026-08-22"のハイフン区切り。
+// 場は場所コード変換用のPLACE_SHORT_CODES(1文字)と同じ表記。
+// 指数レコードとは値を持たない印だけなので、state.gtvFlagsに
+// date|placeCode|race|uma のキーだけをSetで持つ（read側のprocessCsvEntryとは別経路）。
+function processGtvCsv(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return 0;
+  const header = lines[0].split(',').map((s) => s.trim());
+  const idx = {
+    date: header.indexOf('日付'),
+    place: header.indexOf('場'),
+    race: header.indexOf('R'),
+    uma: header.indexOf('番'),
+  };
+  if (idx.date < 0 || idx.place < 0 || idx.race < 0 || idx.uma < 0) {
+    throw new Error('GTV CSVの列（日付,場,R,番）が見つかりません');
+  }
+  let count = 0;
+  for (const line of lines.slice(1)) {
+    const cols = line.split(',');
+    const date8 = (cols[idx.date] || '').trim().replace(/-/g, '');
+    const placeCode = PLACE_SHORT_CODES[(cols[idx.place] || '').trim()];
+    const race = Number((cols[idx.race] || '').trim());
+    const uma = Number((cols[idx.uma] || '').trim());
+    if (!/^\d{8}$/.test(date8) || !placeCode || !race || !uma) continue;
+    state.gtvFlags.add(`${date8}|${placeCode}|${race}|${uma}`);
+    count++;
   }
   return count;
 }
@@ -1002,6 +1036,38 @@ function createSchedulePicker() {
   return input;
 }
 
+// GTV(抑え馬)CSVの選択ボタン。指数レコードとは別のstate.gtvFlagsに
+// 印を足すだけなので、既存のレース一覧をそのまま再描画すればよい。
+function createGtvPicker() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv';
+  input.multiple = true;
+  input.style.display = 'none';
+  input.addEventListener('change', async () => {
+    const files = Array.from(input.files);
+    input.value = '';
+    if (!files.length) return;
+    try {
+      let count = 0;
+      for (const f of files) {
+        count += processGtvCsv(decodeCsv(await f.arrayBuffer()));
+      }
+      if (count === 0) {
+        notify('GTVの印を読み取れませんでした（「日付,場,R,枠,番,馬名」形式のCSVか確認してください）');
+        return;
+      }
+      if (state.records.size > 0) renderRaceList();
+      saveCache();
+      notify(`${count}頭にGTVの印を付けました`);
+    } catch (err) {
+      notify(err.message || '読み込みに失敗しました');
+    }
+  });
+  document.body.appendChild(input);
+  return input;
+}
+
 // ---------- OneDriveなど同期フォルダ経由の端末間共有 ----------
 // Gitを使わずローカルの同期フォルダ(OneDrive等)へ直接JSONを書き出す/読み込む方式。
 // 指数データが公開リポジトリを経由しないので、書き出したファイルは非公開のまま同期される。
@@ -1022,6 +1088,7 @@ function buildSharePayload() {
       surface: r.surface, distance: r.distance,
     })),
     postTimes: [...state.postTimes],
+    gtvFlags: [...state.gtvFlags],
   };
 }
 
@@ -1034,6 +1101,7 @@ function applySharePayload(payload) {
     for (const label of Object.keys(r.scores || {})) state.labels.add(label);
   }
   state.postTimes = new Map(payload.postTimes || []);
+  state.gtvFlags = new Set(payload.gtvFlags || []);
   state.rootName = payload.rootName || '共有ファイル';
   state.hiddenLabels = new Set(payload.hiddenLabels || state.labels);
   state.knownLabels = new Set(state.labels);
@@ -1128,6 +1196,7 @@ async function saveCache() {
         surface: r.surface, distance: r.distance,
       })),
       postTimes: [...state.postTimes],
+      gtvFlags: [...state.gtvFlags],
     });
   } catch { /* 保存できなくても動作は続ける */ }
 }
@@ -1150,6 +1219,7 @@ async function restoreCache() {
   state.hiddenLabels = new Set(cached.hiddenLabels || state.labels);
   state.knownLabels = new Set(state.labels);
   state.postTimes = new Map(cached.postTimes || []);
+  state.gtvFlags = new Set(cached.gtvFlags || []);
 
   finalizeRecords();
   els.empty.hidden = true;
@@ -1283,6 +1353,7 @@ function renderRaceList() {
     // 馬番順に並べるので、優先順位はクラスで示す（先頭行＝1位ではなくなる）
     const horses = r.byUma.map((h) => {
       const popularRank = pop.indexOf(h.uma) + 1;
+      const isGtv = state.gtvFlags.has(`${h.date}|${h.placeCode}|${h.race}|${h.uma}`);
       const classes = [
         h.priorityRank <= 2 ? `p${h.priorityRank}` : '',
         h.placePriorityRank <= 2 ? `fp${h.placePriorityRank}` : '',
@@ -1295,6 +1366,7 @@ function renderRaceList() {
           <span class="fprank" title="${PLACE_PRIORITY_LABEL} ${h.placePriorityRank}位">複${h.placePriorityRank}</span>
           <span class="uma">${h.uma}番</span>
           <span class="hname">${h.name ? escapeHtml(h.name) : ''}</span>
+          ${isGtv ? '<span class="gtv-badge" title="GTV：抑えの一頭">GTV</span>' : ''}
           <span class="pscores">
             <span class="pscore" title="優先スコア">${scoreStrengthHtml(h.priority, h.priorityRank, 'priority')}${scoreCautionHtml(h.priority, 'priority')}<i>優</i>${h.priority.toFixed(3)}</span>
             <span class="fpscore" title="複勝優先スコア">${scoreStrengthHtml(h.placePriority, h.placePriorityRank, 'placePriority')}${scoreCautionHtml(h.placePriority, 'placePriority')}<i>複</i>${h.placePriority.toFixed(3)}</span>
@@ -1637,6 +1709,12 @@ els.scheduleButton.addEventListener('click', () => {
   els.schedulePicker.click();
 });
 
+// GTV(抑え馬)CSVを選ぶ
+els.gtvButton.addEventListener('click', () => {
+  els.gtvPicker = els.gtvPicker || createGtvPicker();
+  els.gtvPicker.click();
+});
+
 // OneDrive等の同期フォルダへ現在のデータをJSONで書き出す(PC側)
 els.shareWriteButton.addEventListener('click', async () => {
   try {
@@ -1679,6 +1757,7 @@ els.clearButton.addEventListener('click', async () => {
   state.labels.clear();
   state.knownLabels = new Set();
   state.postTimes.clear();
+  state.gtvFlags.clear();
   state.races = [];
   els.dashboard.hidden = true;
   els.empty.hidden = false;

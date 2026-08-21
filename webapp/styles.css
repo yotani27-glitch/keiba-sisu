@@ -403,6 +403,19 @@ td.rank-3 { background: var(--rank3-green); font-weight: 600; }
 .race-card .uma { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .race-card .hname { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .race-card .gyn { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+.race-card .gtv-badge {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #6d28d9;
+  background: color-mix(in srgb, #6d28d9 15%, transparent);
+  cursor: help;
+}
+@media (prefers-color-scheme: dark) {
+  .race-card .gtv-badge { color: #c4b5fd; }
+}
 
 @media (max-width: 600px) {
   .toolbar { padding: 12px; }
