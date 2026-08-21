@@ -107,7 +107,7 @@ const state = {
   popular: new Map(), // レースキー -> [人気1位の馬番, 人気2位の馬番]
   postTimes: new Map(), // date|placeCode|race -> { time: "9:40", minutes: 580 }（発走時刻Excelから）
   gtvFlags: new Set(), // date|placeCode|race|uma のSet（GTV CSVで抑え馬として印を付けた馬）
-  keshiFlags: new Set(), // date|placeCode|race|uma のSet（消し馬CSVで軽視として印を付けた馬）
+  keshiFlags: new Set(), // date|placeCode|race|uma のSet（消し馬CSVで△の印を付けた馬）
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -392,7 +392,9 @@ async function processScheduleXlsx(buffer) {
   return count;
 }
 
-// ---------- 印付けCSV読み込み（GTV＝抑え馬・消し馬＝軽視）----------
+// ---------- 印付けCSV読み込み（GTV＝抑え馬・消し馬＝△）----------
+// 消し馬のバッジはあえて「軽視」表記を避けている。スコア帯による
+// 注意アイコン(score-caution、下記)と同じ言葉になり紛らわしいため。
 // どちらも「日付,場,R,枠,番,馬名」形式のヘッダー付きCSVで、日付は
 // "2026-08-22"のハイフン区切り。場は場所コード変換用のPLACE_SHORT_CODES
 // (1文字)と同じ表記。指数レコードとは値を持たない印だけなので、
@@ -1374,7 +1376,7 @@ function renderRaceList() {
           <span class="uma">${h.uma}番</span>
           <span class="hname">${h.name ? escapeHtml(h.name) : ''}</span>
           ${isGtv ? '<span class="gtv-badge" title="GTV：抑えの一頭">GTV</span>' : ''}
-          ${isKeshi ? '<span class="keshi-badge" title="消し馬CSVで軽視の印が付いた馬">軽視</span>' : ''}
+          ${isKeshi ? '<span class="keshi-badge" title="消し馬CSVで印が付いた馬">△</span>' : ''}
           <span class="pscores">
             <span class="pscore" title="優先スコア">${scoreStrengthHtml(h.priority, h.priorityRank, 'priority')}${scoreCautionHtml(h.priority, 'priority')}<i>優</i>${h.priority.toFixed(3)}</span>
             <span class="fpscore" title="複勝優先スコア">${scoreStrengthHtml(h.placePriority, h.placePriorityRank, 'placePriority')}${scoreCautionHtml(h.placePriority, 'placePriority')}<i>複</i>${h.placePriority.toFixed(3)}</span>
@@ -1725,7 +1727,7 @@ els.gtvButton.addEventListener('click', () => {
 
 // 消し馬CSVを選ぶ
 els.keshiButton.addEventListener('click', () => {
-  els.keshiPicker = els.keshiPicker || createFlagPicker(processKeshiCsv, '軽視');
+  els.keshiPicker = els.keshiPicker || createFlagPicker(processKeshiCsv, '消し馬');
   els.keshiPicker.click();
 });
 
