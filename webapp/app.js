@@ -743,17 +743,17 @@ function breakdownHtml(rec) {
 // 確定オッズを使えば分離はもっと鋭くなる（33.7% / 23.5% / 11.1%）が、
 // GYNはレース前に分かるという利点がある。
 const FIRMNESS = {
-  2: { key: 'solid', label: '堅そう', winRate: 30.1, place: 66.0 },
-  1: { key: 'normal', label: '標準', winRate: 24.6, place: 54.6 },
-  0: { key: 'rough', label: '荒れそう', winRate: 17.1, place: 45.2 },
+  2: { key: 'solid', label: '信頼度（高）', winRate: 30.1, place: 66.0 },
+  1: { key: 'normal', label: '信頼度（中）', winRate: 24.6, place: 54.6 },
+  0: { key: 'rough', label: '信頼度（低）', winRate: 17.1, place: 45.2 },
 };
 
 // 当日の確定人気を入れた場合の実測値。2022-2026年の15,367レースで、
 // GYN基準(上)より分離が鋭い。レース当日はこちらを使う。
 const FIRMNESS_ODDS = {
-  2: { key: 'solid', label: '堅そう', winRate: 31.9, place: 64.9 },
-  1: { key: 'normal', label: '標準', winRate: 24.8, place: 55.0 },
-  0: { key: 'rough', label: '荒れそう', winRate: 11.0, place: 35.1 },
+  2: { key: 'solid', label: '信頼度（高）', winRate: 31.9, place: 64.9 },
+  1: { key: 'normal', label: '信頼度（中）', winRate: 24.8, place: 55.0 },
+  0: { key: 'rough', label: '信頼度（低）', winRate: 11.0, place: 35.1 },
 };
 
 // 当日入力した人気上位2頭。レース単位で localStorage に残す
@@ -1333,9 +1333,9 @@ function renderRaceList() {
   const noGyn = counts.unknown > 0
     ? `<span class="chip chip-unknown">判定不可 ${counts.unknown}</span>` : '';
   els.raceSummary.innerHTML = races.length === 0 ? '' : `
-    <span class="chip chip-solid">堅そう ${counts.solid}</span>
-    <span class="chip chip-normal">標準 ${counts.normal}</span>
-    <span class="chip chip-rough">荒れそう ${counts.rough}</span>
+    <span class="chip chip-solid">信頼度（高） ${counts.solid}</span>
+    <span class="chip chip-normal">信頼度（中） ${counts.normal}</span>
+    <span class="chip chip-rough">信頼度（低） ${counts.rough}</span>
     ${noGyn}
     <span class="chip-note">全${races.length}レース</span>
     <span class="chip-note priority-legend"><b>優</b>=優先指数順位 · <b>複</b>=複勝優先指数順位</span>
