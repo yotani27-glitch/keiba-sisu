@@ -660,6 +660,66 @@ button.subtle {
 .race-card .ix.r1 i, .race-card .ix.r1 b,
 .race-card .ix.r2 i, .race-card .ix.r2 b,
 .race-card .ix.r3 i, .race-card .ix.r3 b { color: inherit; opacity: .75; }
+/* 調教情報（トレヨミCSV結合分）。優先指数には使わない参考表示なので、
+   内訳指数(.breakdown/.ix)より一段控えめな見た目にする */
+.race-card .training {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px;
+  margin: 1px 0 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.race-card .tdate {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--muted);
+  cursor: help;
+}
+.race-card .tchip {
+  display: inline-flex;
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.race-card .tchip.tcomment {
+  white-space: normal;
+  color: var(--text);
+}
+.race-card .tchip.teval.up { color: #15803d; border-color: color-mix(in srgb, #15803d 45%, transparent); }
+.race-card .tchip.teval.up-strong { color: #fff; background: #15803d; border-color: transparent; }
+.race-card .tchip.teval.flat { color: var(--muted); }
+.race-card .tchip.teval.down { color: #b91c1c; border-color: color-mix(in srgb, #b91c1c 45%, transparent); }
+/* 通過/ラップタイムはチップの箱で囲わず、素のテキストで縦に並べる */
+.race-card .ttimes {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 0 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.race-card .ttime { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.race-card .tbadge {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #b45309;
+  background: color-mix(in srgb, #b45309 15%, transparent);
+  cursor: help;
+}
+.race-card .tbadge.tstandout { color: #fff; background: #b45309; }
+@media (prefers-color-scheme: dark) {
+  .race-card .tchip.teval.up { color: #4ade80; }
+  .race-card .tchip.teval.down { color: #f87171; }
+  .race-card .tbadge { color: #fbbf24; }
+}
+
 .chip-note.legend { flex: 1 0 100%; font-size: 11px; }
 .chip-note.legend b { color: var(--text); font-weight: 700; }
 .chip-note.priority-legend { flex: 1 0 100%; font-size: 11px; }

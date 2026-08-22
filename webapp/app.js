@@ -108,6 +108,7 @@ const state = {
   postTimes: new Map(), // date|placeCode|race -> { time: "9:40", minutes: 580 }（発走時刻Excelから）
   gtvFlags: new Set(), // date|placeCode|race|uma のSet（GTV CSVで抑え馬として印を付けた馬）
   keshiFlags: new Set(), // date|placeCode|race|uma のSet（消し馬CSVで△の印を付けた馬）
+  training: new Map(), // date|placeCode|race|uma -> { evaluation, comment, course, ... }（調教CSV13種の結合）
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -118,6 +119,7 @@ const els = {
   scheduleButton: $('#scheduleButton'),
   gtvButton: $('#gtvButton'),
   keshiButton: $('#keshiButton'),
+  trainingButton: $('#trainingButton'),
   shareWriteButton: $('#shareWriteButton'),
   shareReadButton: $('#shareReadButton'),
   clearButton: $('#clearButton'),
@@ -449,6 +451,53 @@ function processKeshiCsv(text, filename) {
   return keys.length;
 }
 
+// ---------- 調教CSV読み込み（トレヨミ TARGET連携 プロ版の「出馬表データ(コメント形式)」）----------
+// 「調教」フォルダには項目ごとに1本、計13本のCSVが並ぶ。ファイル名は共通の接頭辞
+// 「トレヨミ TARGET連携 プロ版_出馬表データ(コメント形式)_表_」の後ろに項目名が付く形式で、
+// 中身はどれも「レースID+馬番(18桁),値」（ヘッダー1行、値の無い馬は"-"）。
+// 18桁IDは他の指数CSVと同じ形式（decodeKeyでそのままdate|placeCode|race|umaに分解できる）。
+const TRAINING_FIELDS = {
+  '調教評価': { key: 'evaluation', label: '調教評価' },
+  '調教短評': { key: 'comment', label: '調教短評' },
+  '調教コース': { key: 'course', label: '調教コース' },
+  '調教馬場状態': { key: 'trackCondition', label: '調教馬場状態' },
+  '調教年月日': { key: 'trainedDate', label: '調教年月日' },
+  '脚色': { key: 'legColor', label: '脚色' },
+  '坂路ラップタイム': { key: 'lapTime', label: '坂路ラップタイム' },
+  '坂路ラップグループ': { key: 'lapGroup', label: '坂路ラップグループ' },
+  'ウッド全体好時計': { key: 'woodOverall', label: 'ウッド全体好時計' },
+  'ウッド終い鋭伸': { key: 'woodFinish', label: 'ウッド終い鋭伸' },
+  'ウッド通過タイム': { key: 'woodPassTime', label: 'ウッド通過タイム' },
+  '中1週勝負パターン': { key: 'weekPattern', label: '中1週勝負パターン' },
+  '追切抜群馬': { key: 'standout', label: '追切抜群馬' },
+};
+
+function trainingFieldFromFilename(filename) {
+  const m = (filename || '').match(/_表_(.+)\.csv$/i);
+  return m ? TRAINING_FIELDS[m[1]] : null;
+}
+
+function processTrainingCsv(text, filename) {
+  const field = trainingFieldFromFilename(filename);
+  if (!field) return 0;
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  let count = 0;
+  for (const line of lines.slice(1)) {
+    const idx = line.indexOf(',');
+    if (idx < 0) continue;
+    const id18 = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (!/^\d{18}$/.test(id18) || !value || value === '-') continue;
+    const { date, placeCode, race, uma } = decodeKey(id18);
+    const key = `${date}|${placeCode}|${race}|${uma}`;
+    let rec = state.training.get(key);
+    if (!rec) { rec = {}; state.training.set(key, rec); }
+    rec[field.key] = value;
+    count++;
+  }
+  return count;
+}
+
 // ---------- CSVパース＆ID分解 ----------
 // ラベル+日付.csv（例: 1tua20260808.csv）か、日付のみ.csv（例: 厩舎Finish-Up/20260808.csv、
 // この場合は親フォルダ名をラベルとして使う）のどちらにも対応する。
@@ -760,6 +809,47 @@ function breakdownHtml(rec) {
       + `<i>${short}</i>${val}` + (rank ? `<b>(${rank})</b>` : '') + '</span>');
   }
   return chips.length ? `<div class="breakdown">${chips.join('')}</div>` : '';
+}
+
+// ---------- 調教情報の表示 ----------
+// 「調教」フォルダのCSV（トレヨミ）から結合したコメント形式データ。優先指数の
+// 計算には使わず（未検証のため）、あくまで参考情報として馬ごとに表示するだけ。
+const TRAINING_EVAL_CLASS = {
+  '一変(↑)': 'up-strong',
+  '良化(／)': 'up',
+  '平行(→)': 'flat',
+  '下降気味(＼)': 'down',
+};
+
+function trainingHtml(rec) {
+  const t = state.training.get(`${rec.date}|${rec.placeCode}|${rec.race}|${rec.uma}`);
+  if (!t) return '';
+  const chips = [];
+  if (t.evaluation) {
+    const cls = TRAINING_EVAL_CLASS[t.evaluation] || '';
+    chips.push(`<span class="tchip teval ${cls}" title="調教評価">${escapeHtml(t.evaluation)}</span>`);
+  }
+  if (t.course) chips.push(`<span class="tchip" title="調教コース">${escapeHtml(t.course)}</span>`);
+  if (t.trackCondition) chips.push(`<span class="tchip" title="調教馬場状態">${escapeHtml(t.trackCondition)}</span>`);
+  if (t.legColor) chips.push(`<span class="tchip" title="脚色">${escapeHtml(t.legColor)}</span>`);
+  if (t.comment) chips.push(`<span class="tchip tcomment" title="調教短評">${escapeHtml(t.comment)}</span>`);
+  const badges = [];
+  if (t.standout) badges.push('<span class="tbadge tstandout" title="追切抜群馬（トレヨミ）">抜群</span>');
+  if (t.woodOverall) badges.push('<span class="tbadge tstandout" title="ウッド全体好時計（トレヨミ）">好時計</span>');
+  if (t.woodFinish) badges.push('<span class="tbadge tstandout" title="ウッド終い鋭伸（トレヨミ）">鋭伸</span>');
+  if (t.weekPattern) badges.push('<span class="tbadge" title="中1週勝負パターン（トレヨミ）">中週</span>');
+  // 通過タイム(そこからゴールまでの時計)とラップタイム(区間ごとの時計)は、
+  // 見た目上は他のチップ/バッジと分け、素のテキストで縦に並べる（通過→ラップの順）
+  const times = [];
+  if (t.woodPassTime) times.push(`<span class="ttime" title="通過タイム">通過 ${escapeHtml(t.woodPassTime)}</span>`);
+  if (t.lapTime) {
+    const title = t.lapGroup ? `ラップタイム / ${escapeAttr(t.lapGroup)}` : 'ラップタイム';
+    times.push(`<span class="ttime" title="${title}">ラップ ${escapeHtml(t.lapTime)}</span>`);
+  }
+  if (!chips.length && !badges.length && !times.length) return '';
+  const dateLabel = t.trainedDate ? `<span class="tdate" title="調教年月日">${escapeHtml(t.trainedDate.slice(5))}調教</span>` : '';
+  const timesLine = times.length ? `<div class="ttimes">${times.join('')}</div>` : '';
+  return `<div class="training">${dateLabel}${chips.join('')}${badges.join('')}</div>${timesLine}`;
 }
 
 // ---------- 堅さ判定 ----------
@@ -1088,6 +1178,43 @@ function createFlagPicker(processFn, clearFn, noun) {
   return input;
 }
 
+// 調教CSV（13ファイル）の選択ボタン。GTV/消し馬と違い、1回の選択で複数ファイルの
+// 内容を1頭ごとの情報に結合する（各ファイルは1項目分しか持たない）ため、
+// 選ぶたびに前回分をクリアしてから、選んだファイルぶんだけ結合し直す。
+function createTrainingPicker() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv';
+  input.multiple = true;
+  input.style.display = 'none';
+  input.addEventListener('change', async () => {
+    const files = Array.from(input.files);
+    input.value = '';
+    if (!files.length) return;
+    try {
+      state.training.clear();
+      let count = 0;
+      let matched = 0;
+      for (const f of files) {
+        const before = count;
+        count += processTrainingCsv(decodeCsv(await f.arrayBuffer()), f.name);
+        if (count > before || trainingFieldFromFilename(f.name)) matched++;
+      }
+      if (matched === 0) {
+        notify('調教CSVの項目を認識できませんでした（「調教」フォルダの13ファイルをそのまま選んでください）');
+        return;
+      }
+      if (state.records.size > 0) renderRaceList();
+      saveCache();
+      notify(`調教データを${matched}ファイルぶん結合しました（前回分は置き換わりました）`);
+    } catch (err) {
+      notify(err.message || '読み込みに失敗しました');
+    }
+  });
+  document.body.appendChild(input);
+  return input;
+}
+
 // ---------- OneDriveなど同期フォルダ経由の端末間共有 ----------
 // Gitを使わずローカルの同期フォルダ(OneDrive等)へ直接JSONを書き出す/読み込む方式。
 // 指数データが公開リポジトリを経由しないので、書き出したファイルは非公開のまま同期される。
@@ -1110,6 +1237,7 @@ function buildSharePayload() {
     postTimes: [...state.postTimes],
     gtvFlags: [...state.gtvFlags],
     keshiFlags: [...state.keshiFlags],
+    training: [...state.training],
   };
 }
 
@@ -1124,6 +1252,7 @@ function applySharePayload(payload) {
   state.postTimes = new Map(payload.postTimes || []);
   state.gtvFlags = new Set(payload.gtvFlags || []);
   state.keshiFlags = new Set(payload.keshiFlags || []);
+  state.training = new Map(payload.training || []);
   state.rootName = payload.rootName || '共有ファイル';
   state.hiddenLabels = new Set(payload.hiddenLabels || state.labels);
   state.knownLabels = new Set(state.labels);
@@ -1220,6 +1349,7 @@ async function saveCache() {
       postTimes: [...state.postTimes],
       gtvFlags: [...state.gtvFlags],
       keshiFlags: [...state.keshiFlags],
+      training: [...state.training],
     });
   } catch { /* 保存できなくても動作は続ける */ }
 }
@@ -1244,6 +1374,7 @@ async function restoreCache() {
   state.postTimes = new Map(cached.postTimes || []);
   state.gtvFlags = new Set(cached.gtvFlags || []);
   state.keshiFlags = new Set(cached.keshiFlags || []);
+  state.training = new Map(cached.training || []);
 
   finalizeRecords();
   els.empty.hidden = true;
@@ -1400,6 +1531,7 @@ function renderRaceList() {
           </span>
         </div>
         ${breakdownHtml(h)}
+        ${trainingHtml(h)}
         ${rankRateHtml(r.shape, h.priorityRank)}
       </li>`;
     }).join('');
@@ -1747,6 +1879,12 @@ els.keshiButton.addEventListener('click', () => {
   els.keshiPicker.click();
 });
 
+// 調教CSV（「調教」フォルダの13ファイル）をまとめて選ぶ
+els.trainingButton.addEventListener('click', () => {
+  els.trainingPicker = els.trainingPicker || createTrainingPicker();
+  els.trainingPicker.click();
+});
+
 // OneDrive等の同期フォルダへ現在のデータをJSONで書き出す(PC側)
 els.shareWriteButton.addEventListener('click', async () => {
   try {
@@ -1775,6 +1913,7 @@ els.clearButton.addEventListener('click', async () => {
   state.postTimes.clear();
   state.gtvFlags.clear();
   state.keshiFlags.clear();
+  state.training.clear();
   state.races = [];
   els.dashboard.hidden = true;
   els.empty.hidden = false;
