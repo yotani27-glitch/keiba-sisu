@@ -1416,10 +1416,10 @@ function renderRaceList() {
           </div>
           ${badge}
         </header>
-        <ol class="horses">${horses}</ol>
         <div class="race-actions">
           <button type="button" class="x-post-button" data-race="${r.key}" aria-label="${r.place} ${r.race}Rの全馬をXへ投稿">Xへ投稿</button>
         </div>
+        <ol class="horses">${horses}</ol>
         <div class="popular-input" data-race="${r.key}">
           <label>当日の人気</label>
           <input type="number" inputmode="numeric" min="1" max="${r.fieldSize}"

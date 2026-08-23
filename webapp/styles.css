@@ -519,7 +519,7 @@ button.subtle {
 .race-actions {
   display: flex;
   justify-content: flex-end;
-  padding: 0 12px 8px;
+  padding: 8px 12px 4px;
 }
 .race-actions .x-post-button {
   padding: 5px 10px;
