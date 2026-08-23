@@ -1223,10 +1223,10 @@ function createTrainingPicker() {
 }
 
 // Chrome/Edge向け：「調教」フォルダそのものを選ぶとフォルダ内のCSVをまとめて読む。
-// メイン読み込みのrootDirと違い、こちらは毎回フォルダ選択ダイアログを出す
-// （場所を覚えて省略すると、週次で中身を更新したときに「選び直せない」
-// 「更新されたか分からない」という混乱を招くと分かったため。GTV/消し馬/
-// 厩舎・馬名と同じく、押すたびに明示的に選び直す方式に統一する）。
+// フォルダの場所はメイン読み込みの rootDir と同様にIndexedDBへ覚えておき、
+// 次回以降は権限が残っていればダイアログなしで再読み込みできる。
+const TRAINING_DIR_KEY = 'trainingDir';
+
 async function collectFilesFromDirHandle(dirHandle) {
   const files = [];
   for await (const [name, handle] of dirHandle.entries()) {
@@ -1239,7 +1239,18 @@ async function collectFilesFromDirHandle(dirHandle) {
 
 async function handleTrainingFolderClick() {
   try {
-    const dirHandle = await window.showDirectoryPicker();
+    let dirHandle = await idbGet(TRAINING_DIR_KEY).catch(() => null);
+    if (dirHandle) {
+      const perm = await dirHandle.queryPermission({ mode: 'read' });
+      if (perm !== 'granted') {
+        const req = await dirHandle.requestPermission({ mode: 'read' });
+        if (req !== 'granted') dirHandle = null;
+      }
+    }
+    if (!dirHandle) {
+      dirHandle = await window.showDirectoryPicker();
+      await idbSet(TRAINING_DIR_KEY, dirHandle);
+    }
     const files = await collectFilesFromDirHandle(dirHandle);
     await applyTrainingFiles(files);
   } catch (err) {
