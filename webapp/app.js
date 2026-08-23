@@ -498,6 +498,61 @@ function processTrainingCsv(text, filename) {
   return count;
 }
 
+// トレヨミには上記の項目別13ファイルとは別に、全項目を1ファイルの列として
+// まとめた「一括」形式もある（例: ...出馬表データ 一括_表_26.08.23.csv）。
+// 見出し表記が項目別ファイルと微妙に違う列があるため、専用の対応表で読む。
+// 項目別ファイルは1ファイル2列（ID,値）なのに対しこちらは列数が多いので、
+// ヘッダーの列数で自動判別する（isBulkTrainingCsv）。値にカンマを含む列が
+// 無いことを確認済みなので、単純なsplit(',')で足りる。
+const TRAINING_BULK_COLUMNS = {
+  '調教評価': 'evaluation',
+  '調教短評': 'comment',
+  '調教コース': 'course',
+  '調教馬場状態': 'trackCondition',
+  '調教脚いろ': 'legColor',
+  '調教年月日': 'trainedDate',
+  '調教タイム': 'woodPassTime',
+  '調教ラップタイム': 'lapTime',
+  '坂路ラップグループ': 'lapGroup',
+  'ウッド全体好時計': 'woodOverall',
+  'ウッド終い鋭伸': 'woodFinish',
+  '中1週勝負パターン': 'weekPattern',
+  '追い切り抜群馬': 'standout',
+};
+
+function isBulkTrainingCsv(text) {
+  const firstLine = (text.split(/\r?\n/, 1)[0] || '');
+  const header = firstLine.split(',');
+  return header.length > 5 && header[0].trim() === 'レースID+馬番';
+}
+
+function processTrainingBulkCsv(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return 0;
+  const header = lines[0].split(',').map((s) => s.trim());
+  const fieldIdx = Object.entries(TRAINING_BULK_COLUMNS)
+    .map(([col, field]) => [field, header.indexOf(col)])
+    .filter(([, idx]) => idx >= 0);
+  let count = 0;
+  for (const line of lines.slice(1)) {
+    const cols = line.split(',');
+    const id18 = (cols[0] || '').trim();
+    if (!/^\d{18}$/.test(id18)) continue;
+    const { date, placeCode, race, uma } = decodeKey(id18);
+    const key = `${date}|${placeCode}|${race}|${uma}`;
+    let rec = null;
+    for (const [field, idx] of fieldIdx) {
+      const value = (cols[idx] || '').trim();
+      if (!value || value === '-') continue;
+      if (!rec) rec = state.training.get(key) || {};
+      rec[field] = value;
+      count++;
+    }
+    if (rec) state.training.set(key, rec);
+  }
+  return count;
+}
+
 // ---------- CSVパース＆ID分解 ----------
 // ラベル+日付.csv（例: 1tua20260808.csv）か、日付のみ.csv（例: 厩舎Finish-Up/20260808.csv、
 // この場合は親フォルダ名をラベルとして使う）のどちらにも対応する。
@@ -1178,8 +1233,9 @@ function createFlagPicker(processFn, clearFn, noun) {
   return input;
 }
 
-// 調教CSV（13ファイル）の取り込み。GTV/消し馬と違い、1回の選択で複数ファイルの
-// 内容を1頭ごとの情報に結合する（各ファイルは1項目分しか持たない）ため、
+// 調教CSVの取り込み。項目別13ファイル・一括1ファイルのどちらの形式が
+// 混ざっていても、内容(ヘッダーの列数)で自動判別して結合する。GTV/消し馬と
+// 違い、1回の選択で複数ファイルの内容を1頭ごとの情報に結合するため、
 // 選ぶたびに前回分をクリアしてから、選んだファイルぶんだけ結合し直す。
 async function applyTrainingFiles(files) {
   state.training.clear();
@@ -1187,9 +1243,15 @@ async function applyTrainingFiles(files) {
   let matched = 0;
   for (const f of files) {
     if (!/\.csv$/i.test(f.name)) continue;
+    const text = decodeCsv(await f.arrayBuffer());
     const before = count;
-    count += processTrainingCsv(decodeCsv(await f.arrayBuffer()), f.name);
-    if (count > before || trainingFieldFromFilename(f.name)) matched++;
+    if (isBulkTrainingCsv(text)) {
+      count += processTrainingBulkCsv(text);
+      matched++;
+    } else {
+      count += processTrainingCsv(text, f.name);
+      if (count > before || trainingFieldFromFilename(f.name)) matched++;
+    }
   }
   if (matched === 0) {
     notify('調教CSVの項目を認識できませんでした（「調教」フォルダの13ファイルがそのまま入っているか確認してください）');
