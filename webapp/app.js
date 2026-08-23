@@ -1178,30 +1178,9 @@ function createFlagPicker(processFn, clearFn, noun) {
   return input;
 }
 
-// 調教CSV（13ファイル）の取り込み。GTV/消し馬と違い、1回の選択で複数ファイルの
+// 調教CSV（13ファイル）の選択ボタン。GTV/消し馬と違い、1回の選択で複数ファイルの
 // 内容を1頭ごとの情報に結合する（各ファイルは1項目分しか持たない）ため、
 // 選ぶたびに前回分をクリアしてから、選んだファイルぶんだけ結合し直す。
-async function applyTrainingFiles(files) {
-  state.training.clear();
-  let count = 0;
-  let matched = 0;
-  for (const f of files) {
-    if (!/\.csv$/i.test(f.name)) continue;
-    const before = count;
-    count += processTrainingCsv(decodeCsv(await f.arrayBuffer()), f.name);
-    if (count > before || trainingFieldFromFilename(f.name)) matched++;
-  }
-  if (matched === 0) {
-    notify('調教CSVの項目を認識できませんでした（「調教」フォルダの13ファイルがそのまま入っているか確認してください）');
-    return;
-  }
-  if (state.records.size > 0) renderRaceList();
-  saveCache();
-  notify(`調教データを${matched}ファイルぶん結合しました（前回分は置き換わりました）`);
-}
-
-// 13ファイルをまとめて選ぶ入力（フォルダ選択に対応しないブラウザ・iPhone用。
-// iOSのファイルアプリは複数選択できるので、これでも「調教」フォルダの中身を一括で選べる）
 function createTrainingPicker() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -1213,50 +1192,27 @@ function createTrainingPicker() {
     input.value = '';
     if (!files.length) return;
     try {
-      await applyTrainingFiles(files);
+      state.training.clear();
+      let count = 0;
+      let matched = 0;
+      for (const f of files) {
+        const before = count;
+        count += processTrainingCsv(decodeCsv(await f.arrayBuffer()), f.name);
+        if (count > before || trainingFieldFromFilename(f.name)) matched++;
+      }
+      if (matched === 0) {
+        notify('調教CSVの項目を認識できませんでした（「調教」フォルダの13ファイルをそのまま選んでください）');
+        return;
+      }
+      if (state.records.size > 0) renderRaceList();
+      saveCache();
+      notify(`調教データを${matched}ファイルぶん結合しました（前回分は置き換わりました）`);
     } catch (err) {
       notify(err.message || '読み込みに失敗しました');
     }
   });
   document.body.appendChild(input);
   return input;
-}
-
-// Chrome/Edge向け：「調教」フォルダそのものを選ぶとフォルダ内のCSVをまとめて読む。
-// フォルダの場所はメイン読み込みの rootDir と同様にIndexedDBへ覚えておき、
-// 次回以降は権限が残っていればダイアログなしで再読み込みできる。
-const TRAINING_DIR_KEY = 'trainingDir';
-
-async function collectFilesFromDirHandle(dirHandle) {
-  const files = [];
-  for await (const [name, handle] of dirHandle.entries()) {
-    if (handle.kind === 'file' && /\.csv$/i.test(name)) {
-      files.push(await handle.getFile());
-    }
-  }
-  return files;
-}
-
-async function handleTrainingFolderClick() {
-  try {
-    let dirHandle = await idbGet(TRAINING_DIR_KEY).catch(() => null);
-    if (dirHandle) {
-      const perm = await dirHandle.queryPermission({ mode: 'read' });
-      if (perm !== 'granted') {
-        const req = await dirHandle.requestPermission({ mode: 'read' });
-        if (req !== 'granted') dirHandle = null;
-      }
-    }
-    if (!dirHandle) {
-      dirHandle = await window.showDirectoryPicker();
-      await idbSet(TRAINING_DIR_KEY, dirHandle);
-    }
-    const files = await collectFilesFromDirHandle(dirHandle);
-    await applyTrainingFiles(files);
-  } catch (err) {
-    if (err && err.name === 'AbortError') return;
-    notify(err.message || '読み込みに失敗しました');
-  }
 }
 
 // ---------- OneDriveなど同期フォルダ経由の端末間共有 ----------
@@ -1923,13 +1879,8 @@ els.keshiButton.addEventListener('click', () => {
   els.keshiPicker.click();
 });
 
-// 調教CSV（「調教」フォルダの13ファイル）を読み込む。Chrome/Edgeでは
-// フォルダそのものを選べ、それ以外のブラウザ（iPhone含む）では13ファイルをまとめて選ぶ
+// 調教CSV（「調教」フォルダの13ファイル）をまとめて選ぶ
 els.trainingButton.addEventListener('click', () => {
-  if (typeof window.showDirectoryPicker === 'function') {
-    handleTrainingFolderClick();
-    return;
-  }
   els.trainingPicker = els.trainingPicker || createTrainingPicker();
   els.trainingPicker.click();
 });
