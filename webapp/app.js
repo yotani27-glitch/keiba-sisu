@@ -1440,8 +1440,8 @@ function escapeHtml(s) {
 
 // X投稿用本文。全馬を収めやすいよう、項目名は見出しにまとめ、優先値は小数2桁にする。
 function racePostText(race) {
-  const marks = ['◎', '〇', '▲'];
-  const selections = race.all.slice(0, 3).map((h, i) => {
+  const marks = ['◎', '〇', '▲', '△', '△', '△'];
+  const selections = race.all.slice(0, 6).map((h, i) => {
     const name = h.name ? String(h.name).trim() : '馬名なし';
     return `${marks[i]} ${h.uma}番 ${name}`;
   });
