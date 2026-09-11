@@ -297,22 +297,74 @@ function xmlValue(el) {
   return v ? v.textContent : '';
 }
 
+// xlsxのsharedStrings.xmlを読み、si要素のインデックス配列にする(<t>が複数あるリッチテキストも連結)
+function readSharedStrings(doc) {
+  if (!doc) return [];
+  return [...doc.getElementsByTagName('si')].map((si) =>
+    [...si.getElementsByTagName('t')].map((t) => t.textContent).join(''));
+}
+
+// セル(<c>)の文字列値を、型(t属性)に応じて正しく解決する。
+// t="s"(共有文字列)はsharedStringsから引き、t="inlineStr"は<is><t>を読み、
+// それ以外(数値・数式キャッシュ文字列など)は<v>をそのまま返す。
+// これを怠ると、共有文字列のセルは<v>が単なる索引番号になり、
+// 数値として誤読したり(R番号などが化ける)、文字列として空になったりする。
+function cellText(cell, sharedStrings) {
+  if (!cell) return '';
+  const type = cell.getAttribute('t');
+  if (type === 's') {
+    const idx = Number(xmlValue(cell));
+    return Number.isNaN(idx) ? '' : (sharedStrings[idx] || '');
+  }
+  if (type === 'inlineStr') return xmlText(cell);
+  return xmlValue(cell);
+}
+
+// セルを数値として読む。R番号などが「数値」ではなく「文字列」として
+// 入力されている場合(t="s"/"str"/"inlineStr")でも、cellTextで実体を
+// 取ってから数値化することで正しく読める。
+function cellNumber(cell, sharedStrings) {
+  const type = cell && cell.getAttribute('t');
+  const text = (type === 's' || type === 'str' || type === 'inlineStr')
+    ? cellText(cell, sharedStrings)
+    : xmlValue(cell);
+  const n = Number(text);
+  return Number.isNaN(n) ? null : n;
+}
+
+// セルを「1日を1とした発走時刻シリアル値」として読む。
+// 本来の時刻書式なら数値セルにシリアル値が入っているが、手入力等で
+// 「9:40」のような文字列として入っていることがあるため、その場合は
+// 文字列をH:MM/HH:MMとして解釈してフォールバックする。
+function cellTimeFraction(cell, sharedStrings) {
+  const type = cell && cell.getAttribute('t');
+  if (type !== 's' && type !== 'str' && type !== 'inlineStr') {
+    const n = Number(xmlValue(cell));
+    if (!Number.isNaN(n)) return n;
+  }
+  const text = cellText(cell, sharedStrings).trim();
+  const m = text.match(/^(\d{1,2}):(\d{2})$/);
+  if (m) return (Number(m[1]) * 60 + Number(m[2])) / 1440;
+  const n = Number(text);
+  return Number.isNaN(n) ? null : n;
+}
+
 function xlsxColOf(cell) {
   const ref = cell.getAttribute('r') || '';
   return (ref.match(/^[A-Z]+/) || [''])[0];
 }
 
 // 「該当」シートを読み、場+芝ダ+距離 -> 狙い目コメント のMapを作る
-function readAimSheet(sheetDoc) {
+function readAimSheet(sheetDoc, sharedStrings) {
   const map = new Map();
   for (const row of sheetDoc.getElementsByTagName('row')) {
     let place = '', surface = '', distance = '', aim = '';
     for (const cell of row.getElementsByTagName('c')) {
       const col = xlsxColOf(cell);
-      if (col === 'A') place = xmlText(cell);
-      else if (col === 'B') surface = xmlText(cell);
-      else if (col === 'C') distance = xmlText(cell);
-      else if (col === 'E') aim = xmlText(cell);
+      if (col === 'A') place = cellText(cell, sharedStrings);
+      else if (col === 'B') surface = cellText(cell, sharedStrings);
+      else if (col === 'C') distance = cellText(cell, sharedStrings);
+      else if (col === 'E') aim = cellText(cell, sharedStrings);
     }
     if (place && surface && distance && aim) {
       map.set(`${place}${surface}${distance}`, aim);
@@ -333,6 +385,8 @@ async function processScheduleXlsx(buffer) {
 
   const wbDoc = parseXml(workbookBytes);
   const relsDoc = parseXml(relsBytes);
+  const sharedStringsBytes = byName.get('xl/sharedStrings.xml');
+  const sharedStrings = sharedStringsBytes ? readSharedStrings(parseXml(sharedStringsBytes)) : [];
 
   const targetById = new Map();
   for (const rel of relsDoc.getElementsByTagName('Relationship')) {
@@ -350,7 +404,7 @@ async function processScheduleXlsx(buffer) {
   };
 
   const aimSheetBytes = sheetBytesByName('該当');
-  const aimMap = aimSheetBytes ? readAimSheet(parseXml(aimSheetBytes)) : new Map();
+  const aimMap = aimSheetBytes ? readAimSheet(parseXml(aimSheetBytes), sharedStrings) : new Map();
 
   let count = 0;
   for (const sheet of wbDoc.getElementsByTagName('sheet')) {
@@ -369,12 +423,12 @@ async function processScheduleXlsx(buffer) {
       let place = '', race = null, raceName = '', timeVal = null, courseType = '', distance = '';
       for (const cell of row.getElementsByTagName('c')) {
         const col = xlsxColOf(cell);
-        if (col === 'B') place = xmlText(cell);
-        else if (col === 'C') race = Number(xmlValue(cell));
-        else if (col === 'D') raceName = xmlText(cell);
-        else if (col === 'E') timeVal = Number(xmlValue(cell));
-        else if (col === 'F') courseType = xmlText(cell);
-        else if (col === 'G') distance = xmlText(cell);
+        if (col === 'B') place = cellText(cell, sharedStrings);
+        else if (col === 'C') race = cellNumber(cell, sharedStrings);
+        else if (col === 'D') raceName = cellText(cell, sharedStrings);
+        else if (col === 'E') timeVal = cellTimeFraction(cell, sharedStrings);
+        else if (col === 'F') courseType = cellText(cell, sharedStrings);
+        else if (col === 'G') distance = cellText(cell, sharedStrings);
       }
       const placeCode = PLACE_CODE_BY_NAME[place];
       if (!placeCode || !race || timeVal === null || Number.isNaN(timeVal) || Number.isNaN(race)) continue;
