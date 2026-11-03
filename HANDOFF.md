@@ -13,7 +13,8 @@
   - `nar/baseline.py`：人気別・競馬場別1番人気・4角位置別（先行有利度）・前走4角位置/着順/上がり順位別・枠番別・騎手別の成績を、前半/後半の再現性つきで集計し`nar_data/reports/baseline.md`に保存。
   - 使い方は`nar/README.md`。
 - **PC上の配置**：PCには keiba-sisu のgitクローンが無いため、ユーザーは3ファイル（collect.py・baseline.py・README.md）を直接 `OneDrive\指数\地方\` に置いて使う（`nar/`サブフォルダは作らない）。データは `OneDrive\指数\地方\nar_data\` にできる。
-- **GitHubへのpushが403で失敗**：Claude GitHub Appに keiba-sisu へのアクセスが許可されていない（PC側でClaudeとつながっているのは Akamatsu-AI だけだった）。ユーザーが https://github.com/settings/installations で keiba-sisu を追加すれば解消する見込み。
+- **会社のネットワークでは競馬サイトが遮断される**（ユーザー談）。PCで初回実行したら `SSL: CERTIFICATE_VERIFY_FAILED` になった。会社のネットワークでは実行しない方針で、フィルタを回避する方法（証明書検証の無効化等）は提案しないこと。証明書エラー時は再試行せず1回で止まるよう`collect.py`を修正済み（修正前は失敗のたびに15/60/180秒おいて再試行し、遮断されたアクセスを何度も繰り返していた）。収集は自宅など競馬サイトにつながるネットワークか、Claudeのクラウド環境で行う。
+- **GitHubへのpush**：当初Claude GitHub Appが未インストールで403だったが、ユーザーが設定して解消済み。
 - **未着手（ユーザーの判断待ち）**：どの競馬場・何年分を集めるか。集めた後は、中央と同じく条件付きロジットで「地方版優先指数」を作る想定。
 
 ## 2026-08-20の作業（PC→端末間共有をGit不要のOneDrive方式へ全面移行）

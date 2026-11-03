@@ -26,6 +26,7 @@ import html
 import json
 import random
 import re
+import ssl
 import sys
 import time
 import urllib.error
@@ -74,6 +75,11 @@ class Blocked(Exception):
     """アクセス制限を受けた可能性が高いときに投げる（即座に全体を止める）。"""
 
 
+class NetworkRefused(Exception):
+    """証明書エラー等で接続自体ができないとき（会社などのフィルタで遮断されている場合など）。
+    再試行しても無駄なうえ、遮断されたアクセスの記録が増えるだけなので即座に止める。"""
+
+
 # ---------------------------------------------------------------------------
 # 取得
 # ---------------------------------------------------------------------------
@@ -105,7 +111,11 @@ class Fetcher:
                 if e.code == 404:
                     raise ConnectionError(f"ページがありません（404）: {url}") from e
                 print(f"    HTTP {e.code}: {url}", flush=True)
-            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            except urllib.error.URLError as e:
+                if isinstance(e.reason, ssl.SSLError):
+                    raise NetworkRefused(str(e.reason)) from e
+                print(f"    通信エラー: {e}", flush=True)
+            except (TimeoutError, ConnectionError) as e:
                 print(f"    通信エラー: {e}", flush=True)
             finally:
                 self.last = time.monotonic()
@@ -495,6 +505,10 @@ def collect(args) -> None:
         print(f"\n!! アクセスを中断しました: {e}\n"
               "   アクセス制限を受けた可能性があります。数時間〜1日おいてから同じコマンドで再開してください。\n"
               "   取得済みのページは保存済みなので、続きから再開されます。", flush=True)
+    except NetworkRefused as e:
+        print(f"\n!! ネット競馬に安全に接続できなかったため、すぐに中止しました（{e}）。\n"
+              "   会社などのネットワークでは、フィルタで競馬サイトへの接続が止められていることがあります。\n"
+              "   その場合は、このネットワークでは実行しないでください。", flush=True)
     except KeyboardInterrupt:
         print("\n中断しました（取得済み分は保存済み。同じコマンドで続きから再開できます）")
     finally:
