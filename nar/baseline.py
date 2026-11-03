@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """collect.py で作ったCSVから、地方競馬の基礎傾向を集計するツール。
 
-    python nar/baseline.py                 # nar_data/ の全データ
-    python nar/baseline.py --venues 南関東  # 競馬場を絞る
+    python baseline.py                 # nar_data/ の全データ（collect.py と同じフォルダで実行）
+    python baseline.py --venues 南関東  # 競馬場を絞る
 
 結果は画面表示に加えて nar_data/reports/baseline.md に保存する。
 各表には期間を前半・後半に分けた勝率（または複勝率）を並べてあるので、
@@ -20,6 +20,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.dont_write_bytecode = True  # 置き場所（OneDrive等）に __pycache__ フォルダを作らない
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from collect import DEFAULT_OUT, resolve_venues, VENUES  # noqa: E402
 

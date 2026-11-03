@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """ネット競馬（地方競馬）のレース結果を収集し、分析用CSVにまとめるツール。
 
-使い方（詳しくは nar/README.md）:
-    python nar/collect.py --start 20250101 --end 20261102 --venues 南関東
-    python nar/collect.py --build-only          # キャッシュからCSVだけ作り直す
+使い方（詳しくは README.md）。collect.py を置いたフォルダで実行する:
+    python collect.py --start 20250101 --end 20261102 --venues 南関東
+    python collect.py --build-only          # キャッシュからCSVだけ作り直す
 
-- 取得したページは nar_data/cache/ に圧縮保存し、二度と同じページを取りに行かない
-  （途中で止めても、次回は続きから再開する）
+- データは collect.py と同じフォルダの nar_data/ に保存する
+- 取得したページは nar_data/cache/ に「1日分＝1ファイル」で圧縮保存し、二度と同じ
+  ページを取りに行かない（途中で止めても、次回は続きから再開する）。OneDrive上に
+  置いてもファイル数が膨らまないよう、1日単位にまとめている
 - アクセス間隔は既定3秒。ネット競馬の利用規約（第16条12号：設備の運営に支障を
   与える行為の禁止）に配慮し、短くしすぎないこと
 - 取得データは私的利用の範囲でのみ使うこと（利用規約第14条）。公開リポジトリや
@@ -21,6 +23,7 @@ import csv
 import datetime as dt
 import gzip
 import html
+import json
 import random
 import re
 import sys
@@ -50,7 +53,7 @@ VENUE_GROUPS = {
 }
 BANEI = "65"
 
-DEFAULT_OUT = Path(__file__).resolve().parent.parent / "nar_data"
+DEFAULT_OUT = Path(__file__).resolve().parent / "nar_data"
 
 RACE_FIELDS = [
     "race_id", "date", "venue_code", "venue", "race_no", "race_name", "class",
@@ -119,17 +122,30 @@ def decode(raw: bytes, charset: str = "utf-8") -> str:
     return raw.decode("utf-8", errors="replace")
 
 
-def read_gz(path: Path) -> str:
+def day_path(out: Path, ymd: str) -> Path:
+    return out / "cache" / ymd[:4] / f"{ymd}.json.gz"
+
+
+def load_day(path: Path) -> dict | None:
+    """1日分のキャッシュ: {"race_ids": その日の全レース, "pages": {race_id: 結果ページ}, "no_result": [...]}"""
+    if not path.exists():
+        return None
     with gzip.open(path, "rt", encoding="utf-8") as f:
-        return f.read()
+        return json.load(f)
 
 
-def write_gz(path: Path, text: str) -> None:
+def save_day(path: Path, day: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = path.with_name(path.name + ".tmp")
     with gzip.open(tmp, "wt", encoding="utf-8") as f:
-        f.write(text)
-    tmp.replace(path)
+        json.dump(day, f, ensure_ascii=False)
+    for i in range(10):
+        try:
+            tmp.replace(path)
+            return
+        except PermissionError:  # OneDriveの同期中などで一時的に置き換えられないことがある
+            time.sleep(1 + i)
+    raise PermissionError(f"キャッシュを保存できませんでした（{tmp} に退避しています）: {path}")
 
 
 def trim_result_page(text: str) -> str:
@@ -417,11 +433,6 @@ def daterange_desc(start: dt.date, end: dt.date):
 
 def collect(args) -> None:
     out: Path = args.out
-    cache_list = out / "cache" / "list"
-    cache_result = out / "cache" / "result"
-    empty_file = out / "cache" / "no_result.txt"
-    no_result = set(empty_file.read_text().split()) if empty_file.exists() else set()
-
     today = dt.date.today()
     start = dt.datetime.strptime(args.start, "%Y%m%d").date()
     end = dt.datetime.strptime(args.end, "%Y%m%d").date() if args.end else today - dt.timedelta(days=1)
@@ -435,30 +446,30 @@ def collect(args) -> None:
     fetcher = Fetcher(args.interval)
     consecutive_fail = 0
     new_pages = 0
+    day, path, dirty = None, None, False
     try:
         for d in daterange_desc(start, end):
             ymd = d.strftime("%Y%m%d")
-            list_path = cache_list / f"{ymd}.html.gz"
-            if list_path.exists():
-                race_ids = parse_race_list(read_gz(list_path))
-            else:
+            path = day_path(out, ymd)
+            day, dirty = load_day(path), False
+            if day is None:
                 try:
                     text = fetcher.get(f"{BASE}/top/race_list_sub.html?kaisai_date={ymd}")
                 except ConnectionError as e:
                     print(f"  ! {d:%Y-%m-%d} のレース一覧を取得できませんでした（次回再試行）: {e}", flush=True)
                     continue
                 race_ids = parse_race_list(text)
-                if race_ids:  # 開催なしの日はキャッシュしない（念のため次回も確認）
-                    write_gz(list_path, "\n".join(f"race_id={r}" for r in race_ids))
-            targets = [r for r in race_ids if r[4:6] in venues]
-            todo = [r for r in targets
-                    if r not in no_result and not (cache_result / r[:4] / f"{r}.html.gz").exists()]
-            if not todo:
-                continue
-            per_venue = Counter(VENUES.get(r[4:6], r[4:6]) for r in targets)
-            eta_min = len(todo) * args.interval * 1.1 / 60
-            print(f"{d:%Y-%m-%d} " + " ".join(f"{k}{v}R" for k, v in per_venue.items())
-                  + f" → {len(todo)}件取得（約{eta_min:.0f}分）", flush=True)
+                if not race_ids:  # 開催なしの日は保存しない（念のため次回も確認）
+                    continue
+                day, dirty = {"race_ids": race_ids, "pages": {}, "no_result": []}, True
+            targets = [r for r in day["race_ids"] if r[4:6] in venues]
+            todo = [r for r in targets if r not in day["pages"] and r not in day["no_result"]]
+            if todo:
+                per_venue = Counter(VENUES.get(r[4:6], r[4:6]) for r in targets)
+                eta_min = len(todo) * 3.7 * args.interval / 3 / 60  # 実測: 間隔3秒で1件約3.7秒
+                eta = f"約{eta_min:.0f}分" if eta_min >= 1 else "1分未満"
+                print(f"{d:%Y-%m-%d} " + " ".join(f"{k}{v}R" for k, v in per_venue.items())
+                      + f" → {len(todo)}件取得（{eta}）", flush=True)
             for r in todo:
                 try:
                     text = fetcher.get(f"{BASE}/race/result.html?race_id={r}")
@@ -470,40 +481,45 @@ def collect(args) -> None:
                         raise Blocked("連続で取得に失敗しました") from e
                     continue
                 if 'id="All_Result_Table"' in text and parse_result(text, r):
-                    write_gz(cache_result / r[:4] / f"{r}.html.gz", trim_result_page(text))
+                    day["pages"][r] = trim_result_page(text)
                     new_pages += 1
                 else:
                     # 開催中止・競走不成立などで結果表が無いレース
-                    no_result.add(r)
-                    empty_file.parent.mkdir(parents=True, exist_ok=True)
-                    empty_file.write_text("\n".join(sorted(no_result)))
+                    day["no_result"].append(r)
                     print(f"  - {r}: 結果表なし（中止等）", flush=True)
+                dirty = True
+            if dirty:  # 1日分まとめて保存
+                save_day(path, day)
+                dirty = False
     except Blocked as e:
         print(f"\n!! アクセスを中断しました: {e}\n"
               "   アクセス制限を受けた可能性があります。数時間〜1日おいてから同じコマンドで再開してください。\n"
-              "   取得済みのページはキャッシュ済みなので、続きから再開されます。", flush=True)
+              "   取得済みのページは保存済みなので、続きから再開されます。", flush=True)
     except KeyboardInterrupt:
-        print("\n中断しました（取得済み分はキャッシュ済み。同じコマンドで続きから再開できます）")
+        print("\n中断しました（取得済み分は保存済み。同じコマンドで続きから再開できます）")
+    finally:
+        if dirty and day is not None:  # 途中で止まった日の取得済み分も保存する
+            save_day(path, day)
     print(f"\n今回のアクセス数: {fetcher.count} / 新規保存: {new_pages}レース")
 
 
 def build(out: Path) -> None:
-    files = sorted((out / "cache" / "result").glob("*/*.html.gz"))
+    files = sorted((out / "cache").glob("*/*.json.gz"))
     if not files:
         print("キャッシュがありません。先に収集を実行してください。")
         return
     races, horses, payouts = [], [], []
     bad = 0
     for f in files:
-        race_id = f.name.split(".")[0]
-        parsed = parse_result(read_gz(f), race_id)
-        if not parsed:
-            bad += 1
-            continue
-        r, hs, ps = parsed
-        races.append(r)
-        horses.extend(hs)
-        payouts.extend(ps)
+        for race_id, page in load_day(f)["pages"].items():
+            parsed = parse_result(page, race_id)
+            if not parsed:
+                bad += 1
+                continue
+            r, hs, ps = parsed
+            races.append(r)
+            horses.extend(hs)
+            payouts.extend(ps)
     races.sort(key=lambda r: r["race_id"])
     order = {r["race_id"]: i for i, r in enumerate(races)}
     horses.sort(key=lambda h: (order[h["race_id"]], h["horse_no"] if isinstance(h["horse_no"], int) else 99))
@@ -512,10 +528,14 @@ def build(out: Path) -> None:
                                ("results.csv", horses, HORSE_FIELDS),
                                ("payouts.csv", payouts, PAYOUT_FIELDS)):
         path = out / name
-        with open(path, "w", newline="", encoding="utf-8-sig") as f:
-            w = csv.DictWriter(f, fieldnames=fields)
-            w.writeheader()
-            w.writerows(rows)
+        try:
+            with open(path, "w", newline="", encoding="utf-8-sig") as f:
+                w = csv.DictWriter(f, fieldnames=fields)
+                w.writeheader()
+                w.writerows(rows)
+        except PermissionError:
+            sys.exit(f"{path} に書き込めません。Excelで開いている場合は閉じてから、"
+                     "python collect.py --build-only でCSVだけ作り直してください（取得済みのデータは保存済みです）。")
     print(f"CSVを作成: {out / 'races.csv'}（{len(races)}レース）, results.csv（{len(horses)}頭）, "
           f"payouts.csv（{len(payouts)}行）" + (f" / 解析できなかったキャッシュ{bad}件" if bad else ""))
 

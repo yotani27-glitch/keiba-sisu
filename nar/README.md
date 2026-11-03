@@ -23,17 +23,22 @@
 
 ## 使い方
 
-Python 3.8以上があれば、追加インストールなしで動きます。リポジトリのルート
-（`指数` フォルダ）で実行します。
+Python 3.8以上があれば、追加インストールなしで動きます。`collect.py`・`baseline.py` は
+同じフォルダに置き、PowerShellでそのフォルダへ移動してから実行します。データは同じフォルダの
+`nar_data\` に作られます。
+
+```powershell
+cd "（collect.py を置いたフォルダ）"
+```
 
 ### 1. 結果を集める
 
 ```powershell
 # 南関東4場（浦和・船橋・大井・川崎）の2025年以降
-python nar/collect.py --start 20250101 --venues 南関東
+python collect.py --start 20250101 --venues 南関東
 
 # 全場（ばんえい以外）の昨日分だけ
-python nar/collect.py --start 20261102 --end 20261102
+python collect.py --start 20261102 --end 20261102
 ```
 
 - `--venues` には競馬場名（`大井,川崎`）、グループ（`南関東` `岩手` `東海` `兵庫`）、場コード（`44`）が使えます。省略時はばんえい以外の全場
@@ -53,8 +58,8 @@ python nar/collect.py --start 20261102 --end 20261102
 ### 2. 基礎傾向を集計する
 
 ```powershell
-python nar/baseline.py                  # 集めた全データ
-python nar/baseline.py --venues 南関東  # 競馬場を絞る
+python baseline.py                  # 集めた全データ
+python baseline.py --venues 南関東  # 競馬場を絞る
 ```
 
 画面に表示し、`nar_data/reports/baseline.md` にも保存します。各表に
@@ -74,10 +79,11 @@ python nar/baseline.py --venues 南関東  # 競馬場を絞る
 
 ### CSVだけ作り直す
 
-解析部分を直したときなど、取得はせずにキャッシュからCSVを作り直せます。
+解析部分を直したときや、Excelで開いていてCSVを書き込めなかったときは、取得せずに
+キャッシュからCSVだけ作り直せます。
 
 ```powershell
-python nar/collect.py --build-only
+python collect.py --build-only
 ```
 
 ## 出力ファイル（`nar_data/`、すべて非公開）
@@ -87,9 +93,10 @@ python nar/collect.py --build-only
 | `races.csv` | 1レース | 日付、競馬場、R、レース名、クラス、芝ダ、距離、回り、天候、馬場、頭数、発走時刻、1着賞金、ラップ、前半3F、後半3F（ラップ類は公開している南関東などのみ） |
 | `results.csv` | 1頭 | 着順、枠、馬番、馬ID、馬名、性齢、斤量、騎手ID・騎手名・減量記号、タイム（秒）、着差、人気、単勝オッズ、上がり3F、所属、調教師、馬体重・増減、コーナー通過順（例 `5-7-2-1`）、4角位置 |
 | `payouts.csv` | 1払戻 | 券種、組番、払戻金、人気（単勝〜3連単の全券種） |
-| `cache/` | — | 取得したページ（必要部分だけ圧縮保存、1レース約3KB） |
+| `cache/` | — | 取得したページ（必要部分だけ圧縮保存）。**1日分＝1ファイル**（`cache\2026\20261102.json.gz`）なので、OneDrive上に置いてもファイル数は1年で365個程度 |
 
-文字コードはUTF-8（BOM付き）なので、Excelでそのまま開けます。
+文字コードはUTF-8（BOM付き）なので、Excelでそのまま開けます。ただし収集中にExcelで
+開いたままにしているとCSVを上書きできないので、閉じてから `--build-only` を実行してください。
 
 ## 今後の進め方（案）
 

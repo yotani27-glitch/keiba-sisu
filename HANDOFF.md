@@ -9,9 +9,11 @@
 - **実現性を確認済み**：`nar.netkeiba.com` の日別レース一覧（`/top/race_list_sub.html?kaisai_date=YYYYMMDD`）・結果（`/race/result.html?race_id=...`）・出馬表・馬柱（`/race/shutuba_past.html`、近5走＋中央時代の成績・血統・脚質・間隔入り）がいずれもログイン不要・UTF-8で取得できる。地方のrace_idは「年4桁＋場コード2桁＋月日4桁＋R2桁」。
 - **利用規約（`https://www.netkeiba.com/info/kiyaku.html`）**：スクレイピングの明文禁止は無いが、第14条（私的利用の範囲まで、不特定多数が知りうる状態に置くのは目的を問わず禁止）・第15条（営利禁止）・第16条12号（設備運営に支障を与える行為の禁止）が制約。**収集データは公開リポジトリ・Pagesに置かない**（`nar_data/`を`.gitignore`に追加済み）、アクセス間隔は3秒既定・2秒未満不可にした。
 - **追加したもの**（`nar/`、標準ライブラリのみ）：
-  - `nar/collect.py`：日付範囲・競馬場を指定して結果ページを取得→`nar_data/cache/`に必要部分だけ圧縮保存（1レース約3KB）→`races.csv`/`results.csv`/`payouts.csv`を作成。中断しても続きから再開、HTTP 400/403/429で即停止。
+  - `nar/collect.py`：日付範囲・競馬場を指定して結果ページを取得→スクリプトと同じフォルダの`nar_data/cache/`に必要部分だけ圧縮保存（OneDrive上でファイル数が膨らまないよう1日分＝1ファイルの`YYYYMMDD.json.gz`）→`races.csv`/`results.csv`/`payouts.csv`を作成。中断しても続きから再開、HTTP 400/403/429で即停止。
   - `nar/baseline.py`：人気別・競馬場別1番人気・4角位置別（先行有利度）・前走4角位置/着順/上がり順位別・枠番別・騎手別の成績を、前半/後半の再現性つきで集計し`nar_data/reports/baseline.md`に保存。
   - 使い方は`nar/README.md`。
+- **PC上の配置**：PCには keiba-sisu のgitクローンが無いため、ユーザーは3ファイル（collect.py・baseline.py・README.md）を直接 `OneDrive\指数\地方\` に置いて使う（`nar/`サブフォルダは作らない）。データは `OneDrive\指数\地方\nar_data\` にできる。
+- **GitHubへのpushが403で失敗**：Claude GitHub Appに keiba-sisu へのアクセスが許可されていない（PC側でClaudeとつながっているのは Akamatsu-AI だけだった）。ユーザーが https://github.com/settings/installations で keiba-sisu を追加すれば解消する見込み。
 - **未着手（ユーザーの判断待ち）**：どの競馬場・何年分を集めるか。集めた後は、中央と同じく条件付きロジットで「地方版優先指数」を作る想定。
 
 ## 2026-08-20の作業（PC→端末間共有をGit不要のOneDrive方式へ全面移行）
@@ -63,7 +65,7 @@
 ├── HANDOFF.md                 ← このファイル
 ├── nar/                       ← 地方競馬（ネット競馬）の収集・分析ツール（2026-11-03追加）
 │   ├── collect.py / baseline.py / README.md
-├── nar_data/                  ← 地方の収集データ（gitignore対象、非公開）
+│   └── nar_data/              ← 地方の収集データ（gitignore対象、非公開）
 └── webapp/
     ├── index.html
     ├── app.js                 ← メインロジック（すべてここに集約、680行→1000行超）
