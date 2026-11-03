@@ -3,3 +3,8 @@
 *.csv
 Thumbs.db
 .DS_Store
+
+# 地方競馬の収集データ（ネット競馬の利用規約上、私的利用の範囲に限るため公開しない）
+nar_data/
+*.html.gz
+__pycache__/
