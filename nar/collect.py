@@ -26,6 +26,7 @@ import html
 import json
 import random
 import re
+import signal
 import ssl
 import sys
 import time
@@ -567,6 +568,11 @@ def main() -> None:
 
     if sys.version_info < (3, 8):
         sys.exit("Python 3.8以上が必要です")
+
+    def _terminate(signum, frame):  # 外から止められたときも、その日の取得分を保存してから終わる
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, _terminate)
+
     if not args.build_only:
         if not args.start:
             p.error("--start を指定してください（--build-only のときは不要）")
