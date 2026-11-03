@@ -199,8 +199,10 @@ def parse_race_list(text: str) -> list[str]:
 
 
 def parse_corner_order(s: str) -> dict[int, int]:
-    """'(11,10)-(2,12),(8,9),7' → {11:1, 10:1, 2:3, 12:3, 8:5, 9:5, 7:7}
-    括弧内は横並び（同じ位置）として扱う。"""
+    """'(11,10)-(2,12),(8,9),7' → {11:1, 10:2, 2:3, 12:4, 8:5, 9:6, 7:7}
+    括弧（横並び）の中も書かれた順に1つずつ順位を付ける。ネット競馬の表記は2026年4月ごろから
+    横並びを括弧で書くようになり、それ以前は括弧がほとんど無いため、同じ順位を許すと
+    期間によって「4角先頭」の頭数が変わってしまう（1レース1頭にそろえる）。"""
     s = s.replace("*", "").replace(" ", "")
     out: dict[int, int] = {}
     pos, i = 1, 0
@@ -213,7 +215,7 @@ def parse_corner_order(s: str) -> dict[int, int]:
             group = [x for x in re.split(r"[,\-=・]", s[i + 1 : j]) if x.isdigit()]
             for h in group:
                 out[int(h)] = pos
-            pos += len(group)
+                pos += 1
             i = j + 1
         elif c.isdigit():
             m = re.match(r"\d+", s[i:])
