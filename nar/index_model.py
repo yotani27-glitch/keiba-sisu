@@ -512,6 +512,37 @@ def main() -> None:
         rows.append(row)
     rep.table(["条件", "全体", "前半", "後半"], rows)
 
+    rep.h("6. 人気×指数順位の組み合わせ（検証期間）")
+    rep.p("同じ人気でも、指数の順位が高いか低いかで成績が変わるか。"
+          "「1番人気なのに指数4位以下」のような危ない人気馬や、「人気薄なのに指数上位」の穴馬を探す。")
+    rep.p("")
+    pop_b = [(1, 1, "1番人気"), (2, 3, "2-3番人気"), (4, 5, "4-5番人気"), (6, 99, "6番人気以下")]
+    idx_b = [(1, 1, "指数1位"), (2, 3, "指数2-3位"), (4, 99, "指数4位以下")]
+    cell = defaultdict(list)
+    for hs, X, *_ in test:
+        sc = idx_fn(hs, X)
+        order = sorted(range(len(hs)), key=lambda i: (-sc[i], hs[i]["horse_no"]))
+        rank = {i: r + 1 for r, i in enumerate(order)}
+        for i, h in enumerate(hs):
+            if h["pop"] is None:
+                continue
+            pb = next(n for lo, hi, n in pop_b if lo <= h["pop"] <= hi)
+            ib = next(n for lo, hi, n in idx_b if lo <= rank[i] <= hi)
+            cell[(pb, ib)].append(h)
+    rows = []
+    for _, _, pb in pop_b:
+        for _, _, ib in idx_b:
+            g = cell.get((pb, ib), [])
+            if not g:
+                continue
+            n = len(g)
+            a = [h for h in g if h["date"] < half]
+            b = [h for h in g if h["date"] >= half]
+            rows.append([pb, ib, n, pct(sum(h["win"] for h in g), n), pct(sum(h["place"] for h in g), n),
+                         f"{sum(h['win_ret'] for h in g) / n:.0f}", f"{sum(h['place_ret'] for h in g) / n:.0f}",
+                         f"{pct(sum(h['place'] for h in a), len(a))}/{pct(sum(h['place'] for h in b), len(b))}"])
+    rep.table(["人気", "指数順位", "頭数", "勝率%", "複勝率%", "単回収%", "複回収%", "複勝率 前半/後半"], rows)
+
     text = rep.text()
     rdir = args.out / "reports"
     rdir.mkdir(parents=True, exist_ok=True)
